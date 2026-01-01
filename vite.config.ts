@@ -14,6 +14,7 @@ export default defineConfig({
     preprocessorOptions: {
       less: {
         javascriptEnabled: true,
+        additionalData: `@import "@/styles/variables.less";`,
         modifyVars: {
           // Ant Design Vue 主题变量
           'primary-color': '#1890ff',
