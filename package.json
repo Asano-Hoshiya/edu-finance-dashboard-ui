@@ -1,0 +1,35 @@
+{
+  "name": "edu-finance-dashboard-ui",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc && vite build",
+    "preview": "vite preview",
+    "lint": "eslint . --ext .vue,.js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts --fix"
+  },
+  "dependencies": {
+    "vue": "^3.5.26",
+    "vue-router": "^4.4.5",
+    "pinia": "^3.x",
+    "ant-design-vue": "^4.x",
+    "echarts": "^5.5.1",
+    "axios": "^1.7.8",
+    "@ant-design/icons-vue": "^7.x",
+    "dayjs": "^1.11.13"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^6.0.3",
+    "vite": "^5.4.8",
+    "typescript": "^5.6.4",
+    "vue-tsc": "^2.1.6",
+    "@types/node": "^22.x",
+    "eslint": "^9.x",
+    "eslint-plugin-vue": "^9.27.0",
+    "@vue/eslint-config-typescript": "^14.2.0",
+    "@typescript-eslint/parser": "^8.19.0",
+    "@typescript-eslint/eslint-plugin": "^8.19.0",
+    "less": "^4.3.0"
+  }
+}
