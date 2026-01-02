@@ -1,600 +1,675 @@
 <template>
-  <div class="pivot-table">
+  <div class="pivot-table-page">
+    <!-- 页面标题 -->
     <div class="page-header">
-      <h2>数据透视表</h2>
-      <a-space>
-        <a-button @click="handleExport">
-          <template #icon><DownloadOutlined /></template>
-          导出数据
-        </a-button>
-        <a-button type="primary" @click="handleRefresh">
-          <template #icon><ReloadOutlined /></template>
-          刷新
-        </a-button>
-      </a-space>
+      <h2 class="page-title">日期 × 班级 交叉统计表</h2>
+      <p class="page-desc">按日期和班级维度查看财务数据，支持多班级合并统计</p>
     </div>
 
-    <!-- 维度选择区域 -->
-    <a-card title="维度配置" class="config-card" :bordered="false">
-      <a-row :gutter="[16, 16]">
-        <a-col :xs="24" :sm="12" :md="6">
-          <div class="config-item">
-            <label>行维度：</label>
-            <a-select
-              v-model:value="config.rowDimension"
-              style="width: 100%"
-              @change="handleConfigChange"
-            >
-              <a-select-option v-for="dim in dimensionOptions" :key="dim.value" :value="dim.value">
-                {{ dim.label }}
-              </a-select-option>
-            </a-select>
-          </div>
-        </a-col>
-        <a-col :xs="24" :sm="12" :md="6">
-          <div class="config-item">
-            <label>列维度：</label>
-            <a-select
-              v-model:value="config.colDimension"
-              style="width: 100%"
-              @change="handleConfigChange"
-            >
-              <a-select-option v-for="dim in dimensionOptions" :key="dim.value" :value="dim.value">
-                {{ dim.label }}
-              </a-select-option>
-            </a-select>
-          </div>
-        </a-col>
-        <a-col :xs="24" :sm="12" :md="6">
-          <div class="config-item">
-            <label>度量值：</label>
-            <a-select
-              v-model:value="config.measure"
-              style="width: 100%"
-              @change="handleConfigChange"
-            >
-              <a-select-option v-for="m in measureOptions" :key="m.value" :value="m.value">
-                {{ m.label }}
-              </a-select-option>
-            </a-select>
-          </div>
-        </a-col>
-        <a-col :xs="24" :sm="12" :md="6">
-          <div class="config-item">
-            <label>聚合方式：</label>
-            <a-select
-              v-model:value="config.aggregation"
-              style="width: 100%"
-              @change="handleConfigChange"
-            >
-              <a-select-option value="sum">求和</a-select-option>
-              <a-select-option value="avg">平均值</a-select-option>
-              <a-select-option value="count">计数</a-select-option>
-              <a-select-option value="max">最大值</a-select-option>
-              <a-select-option value="min">最小值</a-select-option>
-            </a-select>
-          </div>
-        </a-col>
-      </a-row>
+    <!-- 筛选区域 -->
+    <a-card class="filter-card" :bordered="false">
+      <a-form layout="inline" :model="filters">
+        <a-row :gutter="[16, 16]" style="width: 100%">
+          <!-- 时间范围 -->
+          <a-col :xs="24" :sm="12" :md="8" :lg="6">
+            <a-form-item label="时间范围">
+              <a-range-picker
+                v-model:value="filters.dateRange"
+                :placeholder="['开始日期', '结束日期']"
+                style="width: 100%"
+                :allow-clear="false"
+              />
+            </a-form-item>
+          </a-col>
 
-      <a-divider />
+          <!-- 校区 -->
+          <a-col :xs="24" :sm="12" :md="8" :lg="5">
+            <a-form-item label="校区">
+              <a-select
+                v-model:value="filters.campusId"
+                placeholder="全部校区"
+                allow-clear
+                style="width: 100%"
+              >
+                <a-select-option
+                  v-for="campus in meta.campuses"
+                  :key="campus.id"
+                  :value="campus.id"
+                >
+                  {{ campus.name }}
+                </a-select-option>
+              </a-select>
+            </a-form-item>
+          </a-col>
 
-      <a-row :gutter="[16, 16]">
-        <a-col :xs="24" :sm="12" :md="8">
-          <div class="config-item">
-            <label>时间范围：</label>
-            <a-range-picker
-              v-model:value="config.dateRange"
-              style="width: 100%"
-              @change="handleConfigChange"
-            />
-          </div>
-        </a-col>
-        <a-col :xs="24" :sm="12" :md="8">
-          <div class="config-item">
-            <label>班级筛选：</label>
-            <a-select
-              v-model:value="config.classFilter"
-              mode="multiple"
-              placeholder="全部班级"
-              style="width: 100%"
-              allowClear
-              @change="handleConfigChange"
-            >
-              <a-select-option v-for="cls in classOptions" :key="cls.value" :value="cls.value">
-                {{ cls.label }}
-              </a-select-option>
-            </a-select>
-          </div>
-        </a-col>
-        <a-col :xs="24" :sm="12" :md="8">
-          <div class="config-item">
-            <label>费用类型：</label>
-            <a-select
-              v-model:value="config.feeType"
-              mode="multiple"
-              placeholder="全部类型"
-              style="width: 100%"
-              allowClear
-              @change="handleConfigChange"
-            >
-              <a-select-option v-for="fee in feeTypeOptions" :key="fee.value" :value="fee.value">
-                {{ fee.label }}
-              </a-select-option>
-            </a-select>
-          </div>
-        </a-col>
-      </a-row>
+          <!-- 课型 -->
+          <a-col :xs="24" :sm="12" :md="8" :lg="5">
+            <a-form-item label="课型">
+              <a-select
+                v-model:value="filters.courseType"
+                placeholder="全部课型"
+                allow-clear
+                style="width: 100%"
+              >
+                <a-select-option
+                  v-for="type in meta.courseTypes"
+                  :key="type"
+                  :value="type"
+                >
+                  {{ type }}
+                </a-select-option>
+              </a-select>
+            </a-form-item>
+          </a-col>
+
+          <!-- 统计指标 -->
+          <a-col :xs="24" :sm="12" :md="8" :lg="5">
+            <a-form-item label="统计指标">
+              <a-select
+                v-model:value="filters.metric"
+                style="width: 100%"
+              >
+                <a-select-option value="netAmount">净收入</a-select-option>
+                <a-select-option value="payAmount">实缴金额</a-select-option>
+                <a-select-option value="refundAmount">退费金额</a-select-option>
+                <a-select-option value="payCount">缴费人数</a-select-option>
+                <a-select-option value="refundCount">退费人数</a-select-option>
+              </a-select>
+            </a-form-item>
+          </a-col>
+
+          <!-- 操作按钮 -->
+          <a-col :xs="24" :sm="24" :md="8" :lg="3">
+            <a-form-item>
+              <a-space>
+                <a-button type="primary" :loading="loading" @click="handleQuery">
+                  <template #icon><SearchOutlined /></template>
+                  查询
+                </a-button>
+                <a-button @click="handleReset">
+                  <template #icon><ReloadOutlined /></template>
+                  重置
+                </a-button>
+              </a-space>
+            </a-form-item>
+          </a-col>
+        </a-row>
+
+        <!-- 班级多选 -->
+        <a-row style="margin-top: 16px">
+          <a-col :span="24">
+            <a-form-item label="筛选班级">
+              <a-select
+                v-model:value="filters.classIds"
+                mode="multiple"
+                placeholder="可选择多个班级进行合并统计（留空显示全部）"
+                allow-clear
+                style="width: 100%"
+                :max-tag-count="5"
+                :options="classOptions"
+                :filter-option="filterClassOption"
+                show-search
+              />
+            </a-form-item>
+          </a-col>
+        </a-row>
+      </a-form>
     </a-card>
 
-    <!-- 透视表展示 -->
-    <a-card title="数据透视结果" :bordered="false" class="pivot-result">
-      <template #extra>
-        <a-radio-group v-model:value="viewMode" button-style="solid" size="small">
-          <a-radio-button value="table">表格视图</a-radio-button>
-          <a-radio-button value="chart">图表视图</a-radio-button>
-        </a-radio-group>
-      </template>
+    <!-- 数据表格 -->
+    <a-card class="table-card" :bordered="false">
+      <!-- 工具栏 -->
+      <div class="table-toolbar">
+        <div class="toolbar-left">
+          <span class="data-info">
+            共 <strong>{{ pivotData.rows.length }}</strong> 天，
+            <strong>{{ pivotData.columns.length - 1 }}</strong> 个班级
+          </span>
+        </div>
+        <div class="toolbar-right">
+          <a-button @click="handleExport" :disabled="pivotData.rows.length === 0">
+            <template #icon><DownloadOutlined /></template>
+            导出 Excel
+          </a-button>
+        </div>
+      </div>
 
-      <!-- 表格视图 -->
-      <div v-if="viewMode === 'table'">
+      <!-- Pivot 表格 -->
+      <div class="pivot-table-wrapper">
         <a-table
-          :columns="pivotColumns"
-          :data-source="pivotData"
-          :pagination="false"
-          :scroll="{ x: 'max-content' }"
-          bordered
+          :columns="tableColumns"
+          :data-source="tableData"
+          :loading="loading"
+          :pagination="paginationConfig"
+          :scroll="{ x: scrollX }"
+          row-key="date"
           size="middle"
+          bordered
+          @change="handleTableChange"
         >
-          <template #bodyCell="{ column, record, text }">
-            <template v-if="column.key !== 'rowHeader'">
-              <span :class="getCellClass(text)">
-                {{ formatCellValue(text) }}
-              </span>
+          <!-- 日期列 -->
+          <template #bodyCell="{ column, record }">
+            <template v-if="column.dataIndex === 'date'">
+              <span class="date-cell">{{ formatDate(record.date) }}</span>
+            </template>
+            <template v-else-if="column.dataIndex === '_total'">
+              <span class="total-cell">{{ formatValue(record.values['_total']) }}</span>
             </template>
             <template v-else>
-              <strong>{{ text }}</strong>
+              <span :class="getCellClass(record.values[column.dataIndex])">
+                {{ formatValue(record.values[column.dataIndex]) }}
+              </span>
             </template>
           </template>
+
+          <!-- 合计行 -->
           <template #summary>
             <a-table-summary fixed>
-              <a-table-summary-row>
-                <a-table-summary-cell :index="0">
+              <a-table-summary-row class="summary-row">
+                <a-table-summary-cell :index="0" class="summary-label">
                   <strong>合计</strong>
                 </a-table-summary-cell>
                 <a-table-summary-cell
-                  v-for="(col, index) in pivotColumns.slice(1)"
-                  :key="col.key"
+                  v-for="(col, index) in pivotData.columns"
+                  :key="col.classId"
                   :index="index + 1"
+                  :class="col.classId === '_total' ? 'summary-total' : ''"
                 >
-                  <strong class="summary-value">{{ getColumnTotal(col.key as string) }}</strong>
+                  <strong>{{ formatValue(pivotData.totals[col.classId]) }}</strong>
                 </a-table-summary-cell>
               </a-table-summary-row>
             </a-table-summary>
           </template>
-        </a-table>
-      </div>
 
-      <!-- 图表视图 -->
-      <div v-else>
-        <div ref="pivotChartRef" class="chart-container"></div>
+          <!-- 空状态 -->
+          <template #emptyText>
+            <a-empty description="暂无数据，请调整筛选条件后查询" />
+          </template>
+        </a-table>
       </div>
     </a-card>
 
-    <!-- 明细数据 -->
-    <a-card title="明细数据" :bordered="false" class="detail-section">
-      <a-table
-        :columns="detailColumns"
-        :data-source="detailData"
-        :pagination="{ pageSize: 10, showSizeChanger: true, showTotal: (total: number) => `共 ${total} 条` }"
-        size="small"
-        :scroll="{ x: 1200 }"
-      >
-        <template #bodyCell="{ column, record }">
-          <template v-if="column.key === 'amount'">
-            <span style="color: #52c41a">¥{{ record.amount.toLocaleString() }}</span>
-          </template>
-          <template v-if="column.key === 'feeType'">
-            {{ getFeeTypeLabel(record.feeType) }}
-          </template>
-        </template>
-      </a-table>
+    <!-- 使用说明 -->
+    <a-card class="help-card" :bordered="false">
+      <a-collapse :bordered="false" ghost>
+        <a-collapse-panel key="1" header="使用说明">
+          <ul class="help-list">
+            <li><strong>行维度：</strong>日期（按天统计）</li>
+            <li><strong>列维度：</strong>班级（可多选合并统计）</li>
+            <li><strong>单元格：</strong>所选指标的聚合值</li>
+            <li><strong>合计列：</strong>每天所有班级的汇总</li>
+            <li><strong>合计行：</strong>每个班级在时间范围内的汇总</li>
+            <li><strong>用途：</strong>不同班级数据合并统计，如统计所有 KET 班级的情况</li>
+          </ul>
+        </a-collapse-panel>
+      </a-collapse>
     </a-card>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, onUnmounted, watch } from 'vue'
-import { message } from 'ant-design-vue'
-import { DownloadOutlined, ReloadOutlined } from '@ant-design/icons-vue'
-import * as echarts from 'echarts'
-import type { Dayjs } from 'dayjs'
+import { ref, reactive, computed, onMounted } from 'vue';
+import { message } from 'ant-design-vue';
+import {
+  SearchOutlined,
+  ReloadOutlined,
+  DownloadOutlined,
+} from '@ant-design/icons-vue';
+import dayjs, { Dayjs } from 'dayjs';
+import type { TableColumnType, TablePaginationConfig } from 'ant-design-vue';
 
-interface PivotConfig {
-  rowDimension: string
-  colDimension: string
-  measure: string
-  aggregation: string
-  dateRange: [Dayjs, Dayjs] | null
-  classFilter: string[]
-  feeType: string[]
-}
+import { getMeta, type Campus } from '@/api/meta';
+import {
+  getPivot,
+  type PivotData,
+  type PivotColumn,
+  type PivotRow,
+  type PivotQueryParams,
+} from '@/api/dashboard';
 
-interface LabelValue {
-  label: string
-  value: string
-}
+// ============================================================
+// 状态定义
+// ============================================================
 
-// 配置
-const config = reactive<PivotConfig>({
-  rowDimension: 'class',
-  colDimension: 'month',
-  measure: 'amount',
-  aggregation: 'sum',
-  dateRange: null,
-  classFilter: [],
-  feeType: []
-})
+const loading = ref(false);
 
-const viewMode = ref<'table' | 'chart'>('table')
-const pivotChartRef = ref<HTMLElement | null>(null)
-let pivotChart: echarts.ECharts | null = null
+/** 元数据 */
+const meta = reactive<{
+  campuses: Campus[];
+  courseTypes: string[];
+}>({
+  campuses: [],
+  courseTypes: [],
+});
 
-// 维度选项
-const dimensionOptions: LabelValue[] = [
-  { value: 'class', label: '班级' },
-  { value: 'teacher', label: '教师' },
-  { value: 'month', label: '月份' },
-  { value: 'feeType', label: '费用类型' },
-  { value: 'paymentMethod', label: '支付方式' }
-]
+/** 班级选项（从已有数据中提取） */
+const classOptions = ref<{ label: string; value: string }[]>([]);
 
-// 度量选项
-const measureOptions: LabelValue[] = [
-  { value: 'amount', label: '金额' },
-  { value: 'count', label: '笔数' },
-  { value: 'students', label: '学生数' }
-]
+/** 筛选条件 */
+const filters = reactive<{
+  dateRange: [Dayjs, Dayjs];
+  campusId: string | undefined;
+  courseType: string | undefined;
+  metric: 'netAmount' | 'payAmount' | 'refundAmount' | 'payCount' | 'refundCount';
+  classIds: string[];
+}>({
+  dateRange: [dayjs().startOf('month'), dayjs().endOf('month')],
+  campusId: undefined,
+  courseType: undefined,
+  metric: 'netAmount',
+  classIds: [],
+});
 
-// 月份映射
-const monthOptions: LabelValue[] = [
-  { value: 'oct', label: '10月' },
-  { value: 'nov', label: '11月' },
-  { value: 'dec', label: '12月' },
-  { value: 'jan', label: '1月' }
-]
+/** Pivot 数据 */
+const pivotData = reactive<PivotData>({
+  columns: [],
+  rows: [],
+  totals: {},
+});
 
-// 班级选项
-const classOptions: LabelValue[] = [
-  { value: 'class_a', label: '高三数学冲刺班A' },
-  { value: 'class_b', label: '初二英语提高班' },
-  { value: 'class_c', label: '小学奥数基础班' },
-  { value: 'class_d', label: '高一物理VIP班' },
-  { value: 'class_e', label: '高二化学提高班' }
-]
+/** 分页配置 */
+const paginationConfig = reactive<TablePaginationConfig>({
+  current: 1,
+  pageSize: 20,
+  total: 0,
+  showSizeChanger: true,
+  showQuickJumper: true,
+  pageSizeOptions: ['10', '20', '50', '100'],
+  showTotal: (total: number) => `共 ${total} 条`,
+});
 
-// 费用类型选项
-const feeTypeOptions: LabelValue[] = [
-  { value: 'tuition', label: '学费' },
-  { value: 'textbook', label: '教材费' },
-  { value: 'material', label: '资料费' },
-  { value: 'training', label: '培训费' }
-]
+// ============================================================
+// 计算属性
+// ============================================================
 
-// 获取费用类型标签
-const getFeeTypeLabel = (value: string): string => {
-  const found = feeTypeOptions.find(item => item.value === value)
-  return found ? found.label : value
-}
-
-// 获取月份标签
-const getMonthLabel = (value: string): string => {
-  const found = monthOptions.find(item => item.value === value)
-  return found ? found.label : value
-}
-
-// 获取班级标签
-const getClassLabel = (value: string): string => {
-  const found = classOptions.find(item => item.value === value)
-  return found ? found.label : value
-}
-
-// 透视表列
-const pivotColumns = computed(() => {
-  const cols: any[] = [
+/** 表格列定义 */
+const tableColumns = computed<TableColumnType[]>(() => {
+  const cols: TableColumnType[] = [
     {
-      title: config.rowDimension === 'class' ? '班级' : config.rowDimension === 'teacher' ? '教师' : '项目',
-      dataIndex: 'rowHeader',
-      key: 'rowHeader',
-      fixed: 'left' as const,
-      width: 150
+      title: '日期',
+      dataIndex: 'date',
+      key: 'date',
+      width: 120,
+      fixed: 'left',
+      sorter: (a: PivotRow, b: PivotRow) => a.date.localeCompare(b.date),
+    },
+  ];
+
+  // 动态添加班级列
+  pivotData.columns.forEach((col: PivotColumn) => {
+    cols.push({
+      title: col.classDisplay,
+      dataIndex: col.classId,
+      key: col.classId,
+      width: 120,
+      align: 'right',
+      fixed: col.classId === '_total' ? 'right' : undefined,
+      sorter: (a: PivotRow, b: PivotRow) =>
+        (a.values[col.classId] || 0) - (b.values[col.classId] || 0),
+    });
+  });
+
+  return cols;
+});
+
+/** 表格数据 */
+const tableData = computed(() => pivotData.rows);
+
+/** 横向滚动宽度 */
+const scrollX = computed(() => {
+  // 日期列 120 + 每个班级列 120 + 合计列 120
+  return 120 + pivotData.columns.length * 120;
+});
+
+/** 指标名称映射 */
+const metricLabels: Record<string, string> = {
+  netAmount: '净收入',
+  payAmount: '实缴金额',
+  refundAmount: '退费金额',
+  payCount: '缴费人数',
+  refundCount: '退费人数',
+};
+
+// ============================================================
+// 方法
+// ============================================================
+
+/** 构建查询参数 */
+function buildQueryParams(): PivotQueryParams {
+  const [start, end] = filters.dateRange;
+  return {
+    startDate: start.format('YYYY-MM-DD'),
+    endDate: end.format('YYYY-MM-DD'),
+    campusId: filters.campusId,
+    courseType: filters.courseType,
+    metric: filters.metric,
+    classIds: filters.classIds.length > 0 ? filters.classIds : undefined,
+  };
+}
+
+/** 加载元数据 */
+async function loadMeta() {
+  try {
+    const data = await getMeta();
+    meta.campuses = data.campuses;
+    meta.courseTypes = data.courseTypes;
+  } catch (error) {
+    console.error('加载元数据失败:', error);
+    message.error('加载元数据失败');
+  }
+}
+
+/** 加载 Pivot 数据 */
+async function loadPivotData() {
+  loading.value = true;
+  try {
+    const params = buildQueryParams();
+    const response = await getPivot(params);
+
+    if (response.code === 0) {
+      pivotData.columns = response.data.columns;
+      pivotData.rows = response.data.rows;
+      pivotData.totals = response.data.totals;
+      paginationConfig.total = response.data.rows.length;
+
+      // 更新班级选项
+      updateClassOptions(response.data.columns);
+    } else {
+      message.error(response.message || '加载数据失败');
     }
-  ]
-
-  // 根据列维度生成列
-  if (config.colDimension === 'month') {
-    monthOptions.forEach(m => {
-      cols.push({
-        title: m.label,
-        dataIndex: m.value,
-        key: m.value,
-        width: 100,
-        fixed: undefined as any
-      })
-    })
-  } else if (config.colDimension === 'feeType') {
-    feeTypeOptions.forEach(f => {
-      cols.push({
-        title: f.label,
-        dataIndex: f.value,
-        key: f.value,
-        width: 100,
-        fixed: undefined as any
-      })
-    })
-  }
-
-  cols.push({
-    title: '合计',
-    dataIndex: 'total',
-    key: 'total',
-    width: 120,
-    fixed: 'right' as const
-  })
-
-  return cols
-})
-
-// Mock 透视表数据 - 使用英文键
-const pivotData = computed(() => {
-  if (config.colDimension === 'month') {
-    return [
-      { rowHeader: '高三数学冲刺班A', oct: 128000, nov: 135000, dec: 142000, jan: 156000, total: 561000 },
-      { rowHeader: '初二英语提高班', oct: 86000, nov: 92000, dec: 88000, jan: 95000, total: 361000 },
-      { rowHeader: '小学奥数基础班', oct: 68000, nov: 72000, dec: 75000, jan: 78000, total: 293000 },
-      { rowHeader: '高一物理VIP班', oct: 180000, nov: 198000, dec: 185000, jan: 210000, total: 773000 },
-      { rowHeader: '高二化学提高班', oct: 95000, nov: 102000, dec: 98000, jan: 108000, total: 403000 }
-    ]
-  } else {
-    return [
-      { rowHeader: '高三数学冲刺班A', tuition: 480000, textbook: 25000, material: 18000, training: 38000, total: 561000 },
-      { rowHeader: '初二英语提高班', tuition: 320000, textbook: 15000, material: 12000, training: 14000, total: 361000 },
-      { rowHeader: '小学奥数基础班', tuition: 260000, textbook: 12000, material: 8000, training: 13000, total: 293000 },
-      { rowHeader: '高一物理VIP班', tuition: 680000, textbook: 35000, material: 28000, training: 30000, total: 773000 },
-      { rowHeader: '高二化学提高班', tuition: 350000, textbook: 20000, material: 15000, training: 18000, total: 403000 }
-    ]
-  }
-})
-
-// 明细表列
-const detailColumns = [
-  { title: '日期', dataIndex: 'date', key: 'date', width: 120 },
-  { title: '班级', dataIndex: 'className', key: 'className', width: 150 },
-  { title: '教师', dataIndex: 'teacher', key: 'teacher', width: 100 },
-  { title: '学生', dataIndex: 'student', key: 'student', width: 100 },
-  { title: '费用类型', dataIndex: 'feeType', key: 'feeType', width: 100 },
-  { title: '金额', dataIndex: 'amount', key: 'amount', width: 120 },
-  { title: '支付方式', dataIndex: 'paymentMethod', key: 'paymentMethod', width: 100 },
-  { title: '备注', dataIndex: 'remark', key: 'remark' }
-]
-
-// Mock 明细数据 - 使用英文键
-const detailData = ref([
-  { date: '2024-01-15', className: '高三数学冲刺班A', teacher: '张老师', student: '张三', feeType: 'tuition', amount: 12800, paymentMethod: '微信支付', remark: '' },
-  { date: '2024-01-15', className: '高三数学冲刺班A', teacher: '张老师', student: '李四', feeType: 'tuition', amount: 12800, paymentMethod: '支付宝', remark: '' },
-  { date: '2024-01-14', className: '初二英语提高班', teacher: '李老师', student: '王五', feeType: 'textbook', amount: 580, paymentMethod: '现金', remark: '' },
-  { date: '2024-01-14', className: '小学奥数基础班', teacher: '王老师', student: '赵六', feeType: 'tuition', amount: 6800, paymentMethod: '银行转账', remark: '' },
-  { date: '2024-01-13', className: '高一物理VIP班', teacher: '赵老师', student: '孙七', feeType: 'training', amount: 3500, paymentMethod: '微信支付', remark: '' },
-  { date: '2024-01-13', className: '高二化学提高班', teacher: '李老师', student: '周八', feeType: 'material', amount: 280, paymentMethod: '支付宝', remark: '' },
-  { date: '2024-01-12', className: '高三数学冲刺班A', teacher: '张老师', student: '吴九', feeType: 'tuition', amount: 12800, paymentMethod: '微信支付', remark: '' },
-  { date: '2024-01-12', className: '初二英语提高班', teacher: '李老师', student: '郑十', feeType: 'tuition', amount: 8600, paymentMethod: '银行转账', remark: '' }
-])
-
-// 计算列合计
-const getColumnTotal = (key: string): string => {
-  if (key === 'rowHeader') return ''
-  const total = pivotData.value.reduce((sum, row: any) => sum + (row[key] || 0), 0)
-  return '¥' + total.toLocaleString()
-}
-
-// 格式化单元格值
-const formatCellValue = (value: any): string => {
-  if (typeof value === 'number') {
-    return '¥' + value.toLocaleString()
-  }
-  return value
-}
-
-// 获取单元格样式
-const getCellClass = (value: any): string => {
-  if (typeof value === 'number') {
-    if (value >= 200000) return 'cell-high'
-    if (value >= 100000) return 'cell-medium'
-    return 'cell-low'
-  }
-  return ''
-}
-
-// 初始化图表
-const initPivotChart = () => {
-  if (!pivotChartRef.value) return
-
-  pivotChart = echarts.init(pivotChartRef.value)
-  updateChart()
-}
-
-// 更新图表
-const updateChart = () => {
-  if (!pivotChart) return
-
-  const categories = pivotData.value.map((row: any) => row.rowHeader)
-  const series: any[] = []
-
-  if (config.colDimension === 'month') {
-    monthOptions.forEach(month => {
-      series.push({
-        name: month.label,
-        type: 'bar',
-        data: pivotData.value.map((row: any) => row[month.value])
-      })
-    })
-  } else {
-    feeTypeOptions.forEach(feeType => {
-      series.push({
-        name: feeType.label,
-        type: 'bar',
-        stack: 'total',
-        data: pivotData.value.map((row: any) => row[feeType.value] || 0)
-      })
-    })
-  }
-
-  const option: echarts.EChartsOption = {
-    tooltip: {
-      trigger: 'axis',
-      axisPointer: { type: 'shadow' },
-      formatter: (params: any) => {
-        let result = params[0].name + '<br/>'
-        params.forEach((p: any) => {
-          result += `${p.marker} ${p.seriesName}: ¥${p.value.toLocaleString()}<br/>`
-        })
-        return result
-      }
-    },
-    legend: {
-      top: 0
-    },
-    grid: {
-      left: '3%',
-      right: '4%',
-      bottom: '3%',
-      top: '15%',
-      containLabel: true
-    },
-    xAxis: {
-      type: 'category',
-      data: categories,
-      axisLabel: {
-        rotate: 30,
-        interval: 0
-      }
-    },
-    yAxis: {
-      type: 'value',
-      axisLabel: {
-        formatter: (value: number) => (value / 10000) + '万'
-      }
-    },
-    series
-  }
-
-  pivotChart.setOption(option, true)
-}
-
-// 配置变化处理
-const handleConfigChange = () => {
-  message.info('配置已更新，重新计算中...')
-  if (viewMode.value === 'chart') {
-    updateChart()
+  } catch (error) {
+    console.error('加载 Pivot 数据失败:', error);
+    message.error('加载数据失败，请稍后重试');
+  } finally {
+    loading.value = false;
   }
 }
 
-// 刷新
-const handleRefresh = () => {
-  message.success('数据已刷新')
+/** 更新班级选项 */
+function updateClassOptions(columns: PivotColumn[]) {
+  classOptions.value = columns
+    .filter((col) => col.classId !== '_total')
+    .map((col) => ({
+      label: col.classDisplay,
+      value: col.classId,
+    }));
 }
 
-// 导出
-const handleExport = () => {
-  message.success('正在导出数据...')
+/** 班级筛选 */
+function filterClassOption(input: string, option: { label: string; value: string }) {
+  return option.label.toLowerCase().includes(input.toLowerCase());
 }
 
-// 监听视图模式变化
-watch(viewMode, (newVal) => {
-  if (newVal === 'chart') {
-    setTimeout(() => {
-      initPivotChart()
-    }, 100)
+/** 查询 */
+function handleQuery() {
+  paginationConfig.current = 1;
+  loadPivotData();
+}
+
+/** 重置 */
+function handleReset() {
+  filters.dateRange = [dayjs().startOf('month'), dayjs().endOf('month')];
+  filters.campusId = undefined;
+  filters.courseType = undefined;
+  filters.metric = 'netAmount';
+  filters.classIds = [];
+  paginationConfig.current = 1;
+  loadPivotData();
+}
+
+/** 表格分页变化 */
+function handleTableChange(pagination: TablePaginationConfig) {
+  paginationConfig.current = pagination.current || 1;
+  paginationConfig.pageSize = pagination.pageSize || 20;
+}
+
+/** 格式化日期 */
+function formatDate(date: string): string {
+  return dayjs(date).format('MM-DD (ddd)');
+}
+
+/** 格式化数值 */
+function formatValue(value: number | undefined): string {
+  if (value === undefined || value === null) {
+    return '-';
   }
-})
-
-// 窗口 resize 处理
-const handleResize = () => {
-  pivotChart?.resize()
+  // 人数类指标显示整数
+  if (filters.metric === 'payCount' || filters.metric === 'refundCount') {
+    return value.toLocaleString('zh-CN');
+  }
+  // 金额类指标显示两位小数
+  return value.toLocaleString('zh-CN', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 }
 
-onMounted(() => {
-  window.addEventListener('resize', handleResize)
-})
+/** 获取单元格样式类 */
+function getCellClass(value: number | undefined): string {
+  if (value === undefined || value === null || value === 0) {
+    return 'cell-zero';
+  }
+  if (filters.metric === 'refundAmount' || filters.metric === 'refundCount') {
+    return value > 0 ? 'cell-negative' : '';
+  }
+  return value > 0 ? 'cell-positive' : '';
+}
 
-onUnmounted(() => {
-  window.removeEventListener('resize', handleResize)
-  pivotChart?.dispose()
-})
+/** 导出 Excel */
+function handleExport() {
+  if (pivotData.rows.length === 0) {
+    message.warning('暂无数据可导出');
+    return;
+  }
+
+  // 构建 CSV 内容
+  const headers = ['日期', ...pivotData.columns.map((c) => c.classDisplay)];
+  const rows = pivotData.rows.map((row) => [
+    row.date,
+    ...pivotData.columns.map((col) => row.values[col.classId] ?? ''),
+  ]);
+
+  // 添加合计行
+  rows.push([
+    '合计',
+    ...pivotData.columns.map((col) => pivotData.totals[col.classId] ?? ''),
+  ]);
+
+  const csvContent = [
+    headers.join(','),
+    ...rows.map((row) => row.join(',')),
+  ].join('\n');
+
+  // 添加 BOM 以支持中文
+  const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `Pivot表_${metricLabels[filters.metric]}_${dayjs().format('YYYYMMDD_HHmmss')}.csv`;
+  link.click();
+  URL.revokeObjectURL(url);
+
+  message.success('导出成功');
+}
+
+// ============================================================
+// 生命周期
+// ============================================================
+
+onMounted(async () => {
+  await loadMeta();
+  await loadPivotData();
+});
 </script>
 
-<style scoped lang="less">
-.pivot-table {
+<style scoped>
+.pivot-table-page {
   padding: 24px;
-  background: #f0f2f5;
+  background: var(--bg-secondary, #f5f7fa);
   min-height: 100%;
 }
 
 .page-header {
+  margin-bottom: 24px;
+}
+
+.page-title {
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--text-primary, #1a1a2e);
+  margin: 0 0 8px 0;
+}
+
+.page-desc {
+  font-size: 14px;
+  color: var(--text-muted, #8c8c8c);
+  margin: 0;
+}
+
+.filter-card {
+  margin-bottom: 24px;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.filter-card :deep(.ant-form-item) {
+  margin-bottom: 0;
+}
+
+.filter-card :deep(.ant-form-item-label > label) {
+  font-weight: 500;
+  color: var(--text-secondary, #666);
+}
+
+.table-card {
+  margin-bottom: 24px;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.table-toolbar {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 24px;
-  flex-wrap: wrap;
+  margin-bottom: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border-color, #e8e8e8);
+}
+
+.toolbar-left {
+  display: flex;
+  align-items: center;
   gap: 16px;
+}
 
-  h2 {
-    margin: 0;
+.data-info {
+  font-size: 14px;
+  color: var(--text-secondary, #666);
+}
+
+.data-info strong {
+  color: var(--primary-color, #667eea);
+}
+
+.pivot-table-wrapper {
+  overflow: hidden;
+}
+
+.pivot-table-wrapper :deep(.ant-table) {
+  font-size: 13px;
+}
+
+.pivot-table-wrapper :deep(.ant-table-thead > tr > th) {
+  background: var(--bg-tertiary, #fafafa);
+  font-weight: 600;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.pivot-table-wrapper :deep(.ant-table-tbody > tr > td) {
+  text-align: right;
+}
+
+.pivot-table-wrapper :deep(.ant-table-tbody > tr > td:first-child) {
+  text-align: center;
+  font-weight: 500;
+}
+
+.date-cell {
+  font-weight: 500;
+  color: var(--text-primary, #1a1a2e);
+}
+
+.total-cell {
+  font-weight: 600;
+  color: var(--primary-color, #667eea);
+  background: rgba(102, 126, 234, 0.05);
+}
+
+.cell-zero {
+  color: var(--text-muted, #bfbfbf);
+}
+
+.cell-positive {
+  color: var(--success-color, #52c41a);
+}
+
+.cell-negative {
+  color: var(--danger-color, #ff4d4f);
+}
+
+.summary-row {
+  background: var(--bg-tertiary, #fafafa);
+}
+
+.summary-row :deep(.ant-table-cell) {
+  text-align: right;
+}
+
+.summary-label {
+  text-align: center !important;
+}
+
+.summary-total {
+  background: rgba(102, 126, 234, 0.08);
+  color: var(--primary-color, #667eea);
+}
+
+.help-card {
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.help-card :deep(.ant-collapse-header) {
+  font-weight: 500;
+  color: var(--text-secondary, #666);
+}
+
+.help-list {
+  margin: 0;
+  padding-left: 20px;
+  line-height: 2;
+  color: var(--text-secondary, #666);
+}
+
+.help-list li strong {
+  color: var(--text-primary, #1a1a2e);
+}
+
+/* 响应式 */
+@media (max-width: 768px) {
+  .pivot-table-page {
+    padding: 16px;
+  }
+
+  .page-title {
     font-size: 20px;
-    font-weight: 600;
-  }
-}
-
-.config-card {
-  margin-bottom: 16px;
-
-  .config-item {
-    label {
-      display: block;
-      margin-bottom: 8px;
-      color: #666;
-      font-size: 13px;
-    }
-  }
-}
-
-.pivot-result {
-  margin-bottom: 16px;
-
-  .chart-container {
-    height: 400px;
   }
 
-  :deep(.cell-high) {
-    color: #52c41a;
-    font-weight: 600;
+  .table-toolbar {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
   }
-
-  :deep(.cell-medium) {
-    color: #1890ff;
-    font-weight: 500;
-  }
-
-  :deep(.cell-low) {
-    color: #666;
-  }
-
-  :deep(.summary-value) {
-    color: #722ed1;
-  }
-}
-
-.detail-section {
-  margin-bottom: 16px;
 }
 </style>

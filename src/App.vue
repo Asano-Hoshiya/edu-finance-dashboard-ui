@@ -1,6 +1,6 @@
 <template>
   <a-config-provider :locale="zhCN">
-    <div id="app">
+    <div class="container">
       <router-view />
     </div>
   </a-config-provider>
@@ -67,7 +67,7 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-#app {
+.app-container {
   width: 100%;
   min-height: 100vh;
 }

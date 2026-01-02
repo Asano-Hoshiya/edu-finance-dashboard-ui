@@ -1,139 +1,145 @@
 <template>
-  <div class="payment-details">
-    <div class="page-header">
-      <h2>缴费明细</h2>
-      <a-space>
-        <a-range-picker
-          v-model:value="dateRange"
-          :placeholder="['开始日期', '结束日期']"
-          style="width: 260px"
-        />
-        <a-button type="primary" @click="handleExport">
-          <template #icon><DownloadOutlined /></template>
-          导出明细
-        </a-button>
-      </a-space>
-    </div>
+  <div class="payment-details-page">
+    <!-- 筛选区 -->
+    <a-card :bordered="false" style="margin-bottom: 16px;">
+      <div class="filter-title">缴费明细核查</div>
+      <a-row :gutter="[12, 12]">
+        <a-col :xs="24" :sm="12" :md="8" :lg="6">
+          <div class="filter-label">报名日期范围</div>
+          <a-range-picker
+            v-model:value="filters.range"
+            style="width: 100%;"
+            :disabled="loading"
+          />
+        </a-col>
 
-    <!-- 筛选区域 -->
-    <a-card class="filter-card" :bordered="false">
-      <a-form layout="inline" :model="filterForm">
-        <a-form-item label="班级">
+        <a-col :xs="24" :sm="12" :md="8" :lg="6">
+          <div class="filter-label">校区（可选）</div>
           <a-select
-            v-model:value="filterForm.classId"
-            placeholder="请选择班级"
-            style="width: 180px"
+            v-model:value="filters.campusId"
             allowClear
+            placeholder="全部校区"
+            style="width: 100%;"
+            :disabled="loading"
           >
-            <a-select-option v-for="cls in classOptions" :key="cls.value" :value="cls.value">
-              {{ cls.label }}
+            <a-select-option v-for="c in meta.campuses" :key="c.id" :value="c.id">
+              {{ c.name }}
             </a-select-option>
           </a-select>
-        </a-form-item>
-        <a-form-item label="缴费状态">
+        </a-col>
+
+        <a-col :xs="24" :sm="12" :md="8" :lg="6">
+          <div class="filter-label">课型（可选）</div>
           <a-select
-            v-model:value="filterForm.status"
-            placeholder="请选择状态"
-            style="width: 120px"
+            v-model:value="filters.courseType"
             allowClear
+            placeholder="全部课型"
+            style="width: 100%;"
+            :disabled="loading"
           >
-            <a-select-option value="paid">已缴费</a-select-option>
-            <a-select-option value="pending">待缴费</a-select-option>
-            <a-select-option value="overdue">已逾期</a-select-option>
+            <a-select-option v-for="t in meta.courseTypes" :key="t" :value="t">
+              {{ t }}
+            </a-select-option>
           </a-select>
-        </a-form-item>
-        <a-form-item label="缴费方式">
-          <a-select
-            v-model:value="filterForm.paymentMethod"
-            placeholder="请选择方式"
-            style="width: 120px"
+        </a-col>
+
+        <a-col :xs="24" :sm="12" :md="8" :lg="6">
+          <div class="filter-label">班级ID（可选）</div>
+          <a-input
+            v-model:value="filters.classId"
+            placeholder="输入班级ID"
             allowClear
-          >
-            <a-select-option value="wechat">微信支付</a-select-option>
-            <a-select-option value="alipay">支付宝</a-select-option>
-            <a-select-option value="bank">银行转账</a-select-option>
-            <a-select-option value="cash">现金</a-select-option>
-          </a-select>
-        </a-form-item>
-        <a-form-item>
-          <a-space>
-            <a-button type="primary" @click="handleSearch">
-              <template #icon><SearchOutlined /></template>
-              查询
-            </a-button>
-            <a-button @click="handleReset">重置</a-button>
-          </a-space>
-        </a-form-item>
-      </a-form>
+            :disabled="loading"
+          />
+        </a-col>
+
+        <a-col :xs="24" :sm="12" :md="8" :lg="6">
+          <div class="filter-label">班主任ID（可选）</div>
+          <a-input
+            v-model:value="filters.teacherId"
+            placeholder="输入班主任ID"
+            allowClear
+            :disabled="loading"
+          />
+        </a-col>
+      </a-row>
+
+      <a-row style="margin-top: 16px;">
+        <a-space>
+          <a-button type="primary" :loading="loading" @click="handleSearch">
+            <template #icon><SearchOutlined /></template>
+            查询
+          </a-button>
+          <a-button :disabled="loading" @click="handleReset">
+            <template #icon><ReloadOutlined /></template>
+            重置
+          </a-button>
+          <a-button :disabled="loading || !dataSource.length" @click="handleExport">
+            <template #icon><DownloadOutlined /></template>
+            导出当前页
+          </a-button>
+        </a-space>
+      </a-row>
     </a-card>
 
-    <!-- 统计汇总 -->
-    <a-row :gutter="[16, 16]" class="stats-section">
-      <a-col :xs="12" :sm="6">
-        <a-card>
-          <a-statistic title="总缴费金额" prefix="¥" :value="statistics.totalAmount" :precision="2" :value-style="{ color: '#52c41a' }" />
-        </a-card>
-      </a-col>
-      <a-col :xs="12" :sm="6">
-        <a-card>
-          <a-statistic title="缴费笔数" :value="statistics.totalCount" suffix="笔" />
-        </a-card>
-      </a-col>
-      <a-col :xs="12" :sm="6">
-        <a-card>
-          <a-statistic title="待缴费金额" prefix="¥" :value="statistics.pendingAmount" :precision="2" :value-style="{ color: '#faad14' }" />
-        </a-card>
-      </a-col>
-      <a-col :xs="12" :sm="6">
-        <a-card>
-          <a-statistic title="逾期未缴" prefix="¥" :value="statistics.overdueAmount" :precision="2" :value-style="{ color: '#ff4d4f' }" />
-        </a-card>
-      </a-col>
-    </a-row>
+    <!-- 统计卡片 -->
+    <a-card :bordered="false" style="margin-bottom: 16px;">
+      <a-row :gutter="16">
+        <a-col :xs="12" :sm="8" :md="6">
+          <a-statistic
+            title="总缴费人数"
+            :value="summary.totalPayCount"
+            :value-style="{ color: '#1890ff' }"
+          />
+        </a-col>
+        <a-col :xs="12" :sm="8" :md="6">
+          <a-statistic
+            title="总实缴金额"
+            :value="summary.totalPayAmount"
+            :precision="2"
+            suffix="元"
+            :value-style="{ color: '#52c41a' }"
+          />
+        </a-col>
+        <a-col :xs="12" :sm="8" :md="6">
+          <a-statistic
+            title="记录条数"
+            :value="pagination.total"
+          />
+        </a-col>
+        <a-col :xs="12" :sm="8" :md="6">
+          <a-statistic
+            title="人均缴费"
+            :value="summary.avgPayAmount"
+            :precision="2"
+            suffix="元"
+          />
+        </a-col>
+      </a-row>
+    </a-card>
 
-    <!-- 缴费明细表格 -->
-    <a-card title="缴费记录" :bordered="false">
+    <!-- 数据表格 -->
+    <a-card :bordered="false">
       <a-table
         :columns="columns"
-        :data-source="paymentData"
-        :pagination="pagination"
+        :data-source="dataSource"
         :loading="loading"
+        :pagination="pagination"
+        :scroll="{ x: 1000 }"
         row-key="id"
-        :scroll="{ x: 1200 }"
+        @change="handleTableChange"
       >
         <template #bodyCell="{ column, record }">
-          <template v-if="column.key === 'studentName'">
-            <a-space>
-              <a-avatar size="small" :style="{ backgroundColor: '#1890ff' }">
-                {{ record.studentName.charAt(0) }}
-              </a-avatar>
-              {{ record.studentName }}
-            </a-space>
+          <template v-if="column.key === 'payDate'">
+            <span>{{ formatDate(record.payDate) }}</span>
           </template>
-          <template v-if="column.key === 'amount'">
-            <span style="color: #52c41a; font-weight: 500">¥{{ record.amount.toLocaleString() }}</span>
+          <template v-else-if="column.key === 'payAmount'">
+            <span style="color: #52c41a; font-weight: 500;">
+              ¥{{ formatNumber(record.payAmount) }}
+            </span>
           </template>
-          <template v-if="column.key === 'status'">
-            <a-tag :color="getStatusColor(record.status)">
-              {{ getStatusText(record.status) }}
-            </a-tag>
-          </template>
-          <template v-if="column.key === 'paymentMethod'">
-            <a-space>
-              <component :is="getPaymentIcon(record.paymentMethod)" />
-              {{ getPaymentMethodText(record.paymentMethod) }}
-            </a-space>
-          </template>
-          <template v-if="column.key === 'action'">
-            <a-space>
-              <a-button type="link" size="small" @click="viewDetail(record)">详情</a-button>
-              <a-button v-if="record.status === 'paid'" type="link" size="small" @click="printReceipt(record)">
-                打印收据
-              </a-button>
-              <a-button v-if="record.status === 'pending'" type="link" size="small" @click="sendReminder(record)">
-                发送提醒
-              </a-button>
-            </a-space>
+          <template v-else-if="column.key === 'className'">
+            <a-tag color="blue">{{ record.className }}</a-tag>
           </template>
         </template>
       </a-table>
@@ -142,195 +148,262 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
-import { message } from 'ant-design-vue'
-import {
-  DownloadOutlined,
-  SearchOutlined,
-  WechatOutlined,
-  AlipayCircleOutlined,
-  BankOutlined,
-  DollarOutlined
-} from '@ant-design/icons-vue'
-import type { Dayjs } from 'dayjs'
+import { reactive, ref, onMounted, computed } from 'vue';
+import { message } from 'ant-design-vue';
+import { SearchOutlined, ReloadOutlined, DownloadOutlined } from '@ant-design/icons-vue';
+import dayjs, { Dayjs } from 'dayjs';
+import type { TableProps, TablePaginationConfig } from 'ant-design-vue';
+import { getPaymentDetails } from '@/api/dashboard';
+import type { PaymentDetailItem, PaymentDetailsQueryParams } from '@/api/dashboard';
+import { getMeta } from '@/api/meta';
+import type { Campus } from '@/api/meta';
 
-interface PaymentRecord {
-  id: string
-  studentName: string
-  studentId: string
-  className: string
-  feeType: string
-  amount: number
-  status: string
-  paymentMethod: string
-  paymentTime: string
-  operator: string
-  remark: string
-}
+// ============================================================
+// 数据状态
+// ============================================================
 
-// 日期范围
-const dateRange = ref<[Dayjs, Dayjs] | null>(null)
-const loading = ref(false)
+const loading = ref(false);
 
-// 筛选表单
-const filterForm = reactive({
-  classId: undefined as string | undefined,
-  status: undefined as string | undefined,
-  paymentMethod: undefined as string | undefined
-})
+const meta = reactive({
+  campuses: [] as Campus[],
+  courseTypes: ['PS', 'S', 'KET', 'PET', 'FCE', 'CAE'] as string[],
+});
 
-// 班级选项
-const classOptions = [
-  { value: '1', label: '高三数学冲刺班A' },
-  { value: '2', label: '初二英语提高班' },
-  { value: '3', label: '小学奥数基础班' },
-  { value: '4', label: '高一物理VIP班' }
-]
+const filters = reactive<{
+  range: [Dayjs, Dayjs] | null;
+  campusId?: string;
+  courseType?: string;
+  classId?: string;
+  teacherId?: string;
+}>({
+  range: [dayjs().startOf('month'), dayjs().endOf('month')],
+  campusId: undefined,
+  courseType: undefined,
+  classId: undefined,
+  teacherId: undefined,
+});
 
-// 统计数据
-const statistics = reactive({
-  totalAmount: 528600,
-  totalCount: 156,
-  pendingAmount: 45800,
-  overdueAmount: 12600
-})
+const dataSource = ref<PaymentDetailItem[]>([]);
 
-// 分页配置
-const pagination = reactive({
+const pagination = reactive<TablePaginationConfig>({
   current: 1,
-  pageSize: 10,
-  total: 156,
+  pageSize: 20,
+  total: 0,
   showSizeChanger: true,
   showQuickJumper: true,
-  showTotal: (total: number) => `共 ${total} 条记录`
-})
+  showTotal: (total: number) => `共 ${total} 条记录`,
+  pageSizeOptions: ['10', '20', '50', '100'],
+});
 
-// 表格列
-const columns = [
-  { title: '缴费单号', dataIndex: 'id', key: 'id', width: 140 },
-  { title: '学生姓名', dataIndex: 'studentName', key: 'studentName', width: 130 },
-  { title: '学号', dataIndex: 'studentId', key: 'studentId', width: 100 },
-  { title: '班级', dataIndex: 'className', key: 'className', width: 150 },
-  { title: '费用类型', dataIndex: 'feeType', key: 'feeType', width: 100 },
-  { title: '金额', dataIndex: 'amount', key: 'amount', width: 120 },
-  { title: '状态', dataIndex: 'status', key: 'status', width: 100 },
-  { title: '支付方式', dataIndex: 'paymentMethod', key: 'paymentMethod', width: 120 },
-  { title: '缴费时间', dataIndex: 'paymentTime', key: 'paymentTime', width: 160 },
-  { title: '操作', key: 'action', width: 160, fixed: 'right' as const }
-]
+// 统计汇总
+const summary = computed(() => {
+  const totalPayCount = dataSource.value.reduce((sum, item) => sum + item.payCount, 0);
+  const totalPayAmount = dataSource.value.reduce((sum, item) => sum + item.payAmount, 0);
+  const avgPayAmount = totalPayCount > 0 ? totalPayAmount / totalPayCount : 0;
 
-// Mock 缴费数据
-const paymentData = ref<PaymentRecord[]>([
-  { id: 'PAY20240115001', studentName: '张三', studentId: 'S001', className: '高三数学冲刺班A', feeType: '学费', amount: 12800, status: 'paid', paymentMethod: 'wechat', paymentTime: '2024-01-15 10:30:00', operator: '系统', remark: '' },
-  { id: 'PAY20240115002', studentName: '李四', studentId: 'S002', className: '高三数学冲刺班A', feeType: '学费', amount: 12800, status: 'paid', paymentMethod: 'alipay', paymentTime: '2024-01-15 11:20:00', operator: '系统', remark: '' },
-  { id: 'PAY20240114001', studentName: '王五', studentId: 'S003', className: '初二英语提高班', feeType: '学费', amount: 8600, status: 'paid', paymentMethod: 'bank', paymentTime: '2024-01-14 09:45:00', operator: '财务', remark: '银行转账' },
-  { id: 'PAY20240114002', studentName: '赵六', studentId: 'S004', className: '初二英语提高班', feeType: '教材费', amount: 580, status: 'pending', paymentMethod: '', paymentTime: '', operator: '', remark: '待缴费' },
-  { id: 'PAY20240113001', studentName: '孙七', studentId: 'S005', className: '小学奥数基础班', feeType: '学费', amount: 6800, status: 'overdue', paymentMethod: '', paymentTime: '', operator: '', remark: '已逾期3天' },
-  { id: 'PAY20240113002', studentName: '周八', studentId: 'S006', className: '高一物理VIP班', feeType: '学费', amount: 18000, status: 'paid', paymentMethod: 'cash', paymentTime: '2024-01-13 14:00:00', operator: '财务', remark: '现金收款' },
-  { id: 'PAY20240112001', studentName: '吴九', studentId: 'S007', className: '高三数学冲刺班A', feeType: '资料费', amount: 280, status: 'paid', paymentMethod: 'wechat', paymentTime: '2024-01-12 16:30:00', operator: '系统', remark: '' },
-  { id: 'PAY20240112002', studentName: '郑十', studentId: 'S008', className: '初二英语提高班', feeType: '学费', amount: 8600, status: 'pending', paymentMethod: '', paymentTime: '', operator: '', remark: '待缴费' }
-])
+  return {
+    totalPayCount,
+    totalPayAmount,
+    avgPayAmount,
+  };
+});
 
-// 状态相关
-const getStatusColor = (status: string) => {
-  const map: Record<string, string> = {
-    paid: 'green',
-    pending: 'orange',
-    overdue: 'red'
+// ============================================================
+// 表格配置
+// ============================================================
+
+const columns: TableProps['columns'] = [
+  {
+    title: '报名日期',
+    dataIndex: 'payDate',
+    key: 'payDate',
+    width: 120,
+    fixed: 'left',
+  },
+  {
+    title: '班级',
+    dataIndex: 'className',
+    key: 'className',
+    width: 150,
+  },
+  {
+    title: '班主任',
+    dataIndex: 'teacherName',
+    key: 'teacherName',
+    width: 100,
+  },
+  {
+    title: '校区',
+    dataIndex: 'campusName',
+    key: 'campusName',
+    width: 120,
+  },
+  {
+    title: '课型',
+    dataIndex: 'courseType',
+    key: 'courseType',
+    width: 80,
+  },
+  {
+    title: '缴费人数',
+    dataIndex: 'payCount',
+    key: 'payCount',
+    width: 100,
+    align: 'right',
+  },
+  {
+    title: '实缴金额',
+    dataIndex: 'payAmount',
+    key: 'payAmount',
+    width: 120,
+    align: 'right',
+  },
+];
+
+// ============================================================
+// 业务逻辑
+// ============================================================
+
+function buildQueryParams(): PaymentDetailsQueryParams {
+  const [start, end] = filters.range ?? [
+    dayjs().startOf('month'),
+    dayjs().endOf('month'),
+  ];
+
+  return {
+    startDate: start.format('YYYY-MM-DD'),
+    endDate: end.format('YYYY-MM-DD'),
+    campusId: filters.campusId,
+    courseType: filters.courseType,
+    classId: filters.classId,
+    teacherId: filters.teacherId,
+    page: pagination.current,
+    pageSize: pagination.pageSize,
+  };
+}
+
+async function fetchData() {
+  loading.value = true;
+  try {
+    const params = buildQueryParams();
+    const response = await getPaymentDetails(params);
+
+    dataSource.value = response.data.items;
+    pagination.total = response.data.total;
+    pagination.current = response.data.page;
+    pagination.pageSize = response.data.pageSize;
+  } catch (error: any) {
+    message.error(error?.message || '获取数据失败');
+    console.error('获取缴费明细失败:', error);
+  } finally {
+    loading.value = false;
   }
-  return map[status] || 'default'
 }
 
-const getStatusText = (status: string) => {
-  const map: Record<string, string> = {
-    paid: '已缴费',
-    pending: '待缴费',
-    overdue: '已逾期'
+async function fetchMeta() {
+  try {
+    const metaData = await getMeta();
+    meta.campuses = metaData.campuses;
+    meta.courseTypes = metaData.courseTypes;
+  } catch (error: any) {
+    console.error('获取元数据失败:', error);
   }
-  return map[status] || status
 }
 
-// 支付方式相关
-const getPaymentMethodText = (method: string) => {
-  const map: Record<string, string> = {
-    wechat: '微信支付',
-    alipay: '支付宝',
-    bank: '银行转账',
-    cash: '现金'
-  }
-  return map[method] || '-'
+function handleSearch() {
+  pagination.current = 1;
+  fetchData();
 }
 
-const getPaymentIcon = (method: string) => {
-  const map: Record<string, any> = {
-    wechat: WechatOutlined,
-    alipay: AlipayCircleOutlined,
-    bank: BankOutlined,
-    cash: DollarOutlined
-  }
-  return map[method] || DollarOutlined
+function handleReset() {
+  filters.range = [dayjs().startOf('month'), dayjs().endOf('month')];
+  filters.campusId = undefined;
+  filters.courseType = undefined;
+  filters.classId = undefined;
+  filters.teacherId = undefined;
+  pagination.current = 1;
+  fetchData();
 }
 
-// 事件处理
-const handleSearch = () => {
-  loading.value = true
-  setTimeout(() => {
-    loading.value = false
-    message.success('查询完成')
-  }, 500)
+function handleTableChange(pag: TablePaginationConfig) {
+  pagination.current = pag.current ?? 1;
+  pagination.pageSize = pag.pageSize ?? 20;
+  fetchData();
 }
 
-const handleReset = () => {
-  filterForm.classId = undefined
-  filterForm.status = undefined
-  filterForm.paymentMethod = undefined
-  dateRange.value = null
+function handleExport() {
+  // 简单导出为 CSV
+  const headers = ['报名日期', '班级', '班主任', '校区', '课型', '缴费人数', '实缴金额'];
+  const rows = dataSource.value.map(item => [
+    formatDate(item.payDate),
+    item.className,
+    item.teacherName,
+    item.campusName || '-',
+    item.courseType || '-',
+    item.payCount,
+    item.payAmount,
+  ]);
+
+  const csvContent = [
+    headers.join(','),
+    ...rows.map(row => row.join(',')),
+  ].join('\n');
+
+  const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = `缴费明细_${dayjs().format('YYYYMMDDHHmmss')}.csv`;
+  link.click();
+
+  message.success('导出成功');
 }
 
-const handleExport = () => {
-  message.success('正在导出缴费明细...')
+// ============================================================
+// 工具函数
+// ============================================================
+
+function formatDate(dateStr: string): string {
+  return dayjs(dateStr).format('YYYY-MM-DD');
 }
 
-const viewDetail = (record: PaymentRecord) => {
-  message.info(`查看缴费单详情: ${record.id}`)
+function formatNumber(num: number): string {
+  return num.toFixed(2);
 }
 
-const printReceipt = (record: PaymentRecord) => {
-  message.success(`正在打印收据: ${record.id}`)
-}
+// ============================================================
+// 生命周期
+// ============================================================
 
-const sendReminder = (record: PaymentRecord) => {
-  message.success(`已发送缴费提醒给: ${record.studentName}`)
-}
+onMounted(() => {
+  fetchMeta();
+  fetchData();
+});
 </script>
 
-<style scoped lang="less">
-.payment-details {
-  padding: 24px;
-  background: #f0f2f5;
-  min-height: 100%;
+<style scoped>
+.payment-details-page {
+  padding: 16px;
 }
 
-.page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 24px;
-  flex-wrap: wrap;
-  gap: 16px;
-
-  h2 {
-    margin: 0;
-    font-size: 20px;
-    font-weight: 600;
-  }
-}
-
-.filter-card {
+.filter-title {
+  font-size: 16px;
+  font-weight: 600;
   margin-bottom: 16px;
+  color: rgba(0, 0, 0, 0.85);
 }
 
-.stats-section {
-  margin-bottom: 16px;
+.filter-label {
+  font-weight: 500;
+  margin-bottom: 8px;
+  color: rgba(0, 0, 0, 0.65);
+}
+
+:deep(.ant-statistic-title) {
+  font-size: 14px;
+  color: rgba(0, 0, 0, 0.45);
+}
+
+:deep(.ant-statistic-content) {
+  font-size: 20px;
 }
 </style>

@@ -1,5 +1,5 @@
 // ============================================
-// 教育财务看板 - Less 变量定义
+// 教育财务看板 - /src/styles/variables.less
 // 用于 Ant Design Vue 主题覆盖和组件样式
 // ============================================
 
@@ -139,6 +139,18 @@
 @menu-dark-item-active-bg: @primary-color;
 
 // ==================== 工具 Mixin ====================
+:root {
+  // 背景色
+  --bg-secondary: #f5f7fa;
+  --bg-tertiary: #fafafa;
+
+  // 文字色
+  --text-muted: #bfbfbf;
+
+  // 状态色
+  --danger-color: #ff4d4f;
+}
+
 .clearfix() {
   &::before,
   &::after {

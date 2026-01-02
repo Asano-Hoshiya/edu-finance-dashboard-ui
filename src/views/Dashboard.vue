@@ -1,129 +1,209 @@
+<!-- src/views/Dashboard.vue -->
 <template>
   <div class="dashboard-container">
     <!-- 筛选区 -->
     <a-card class="filter-card" :bordered="false">
-      <a-form layout="inline" :model="filterForm">
-        <a-form-item label="时间范围">
+      <a-row :gutter="16" align="middle">
+        <a-col :xs="24" :sm="24" :md="8" :lg="8">
+          <div class="filter-label">时间范围</div>
           <a-range-picker
-            v-model:value="filterForm.dateRange"
+            v-model:value="filters.range"
             :placeholder="['开始日期', '结束日期']"
-            format="YYYY-MM-DD"
-            style="width: 240px"
-            @change="handleFilterChange"
+            style="width: 100%"
+            :allow-clear="false"
           />
-        </a-form-item>
-        <a-form-item label="校区">
+        </a-col>
+        <a-col :xs="24" :sm="12" :md="6" :lg="6">
+          <div class="filter-label">校区（可选）</div>
           <a-select
-            v-model:value="filterForm.campus"
-            placeholder="请选择校区"
-            style="width: 160px"
-            allowClear
-            @change="handleFilterChange"
+            v-model:value="filters.campusId"
+            allow-clear
+            placeholder="全部校区"
+            style="width: 100%"
+            :loading="metaLoading"
           >
             <a-select-option
-              v-for="item in campusOptions"
-              :key="item.value"
-              :value="item.value"
+              v-for="campus in metaData.campuses"
+              :key="campus.id"
+              :value="campus.id"
             >
-              {{ item.label }}
+              {{ campus.name }}
             </a-select-option>
           </a-select>
-        </a-form-item>
-        <a-form-item label="课型">
+        </a-col>
+        <a-col :xs="24" :sm="12" :md="6" :lg="6">
+          <div class="filter-label">课型（可选）</div>
           <a-select
-            v-model:value="filterForm.courseType"
-            placeholder="请选择课型"
-            style="width: 160px"
-            allowClear
-            @change="handleFilterChange"
+            v-model:value="filters.courseType"
+            allow-clear
+            placeholder="全部课型"
+            style="width: 100%"
           >
             <a-select-option
-              v-for="item in courseTypeOptions"
-              :key="item.value"
-              :value="item.value"
+              v-for="courseType in metaData.courseTypes"
+              :key="courseType"
+              :value="courseType"
             >
-              {{ item.label }}
+              {{ courseType }}
             </a-select-option>
           </a-select>
-        </a-form-item>
-        <a-form-item>
-          <a-button type="primary" @click="handleSearch">
-            <template #icon><SearchOutlined /></template>
-            查询
-          </a-button>
-          <a-button style="margin-left: 8px" @click="handleReset">
-            <template #icon><ReloadOutlined /></template>
-            重置
-          </a-button>
-        </a-form-item>
-      </a-form>
+        </a-col>
+        <a-col :xs="24" :sm="24" :md="4" :lg="4">
+          <div class="filter-label">&nbsp;</div>
+          <a-space>
+            <a-button type="primary" :loading="loading" @click="handleQuery">
+              <template #icon><SearchOutlined /></template>
+              查询
+            </a-button>
+            <a-button :loading="loading" @click="handleReset">
+              <template #icon><ReloadOutlined /></template>
+              重置
+            </a-button>
+          </a-space>
+        </a-col>
+      </a-row>
     </a-card>
 
-    <!-- KPI 指标卡区域 -->
-    <div class="kpi-section">
-      <a-row :gutter="[16, 16]">
-        <a-col :xs="24" :sm="12" :md="6" v-for="kpi in kpiData" :key="kpi.key">
-          <KPICard
-            :title="kpi.title"
-            :value="kpi.value"
-            :prefix="kpi.prefix"
-            :suffix="kpi.suffix"
-            :trend="kpi.trend"
-            :trendValue="kpi.trendValue"
-            :icon="kpi.icon"
-            :color="kpi.color"
-          />
-        </a-col>
-      </a-row>
-    </div>
+    <!-- KPI 卡片区 - 第一行 -->
+    <a-row :gutter="16" class="kpi-row">
+      <a-col :xs="24" :sm="12" :md="6" :lg="6">
+        <KpiCard
+          title="缴费人数"
+          :value="summary.payCount"
+          suffix="人"
+          icon="team"
+          color="#1890ff"
+          :loading="loading"
+        />
+      </a-col>
+      <a-col :xs="24" :sm="12" :md="6" :lg="6">
+        <KpiCard
+          title="实缴金额"
+          :value="summary.payAmount"
+          prefix="¥"
+          :precision="2"
+          icon="pay-circle"
+          color="#52c41a"
+          :loading="loading"
+        />
+      </a-col>
+      <a-col :xs="24" :sm="12" :md="6" :lg="6">
+        <KpiCard
+          title="退费金额"
+          :value="summary.refundAmount"
+          prefix="¥"
+          :precision="2"
+          icon="transaction"
+          color="#faad14"
+          :loading="loading"
+        />
+      </a-col>
+      <a-col :xs="24" :sm="12" :md="6" :lg="6">
+        <KpiCard
+          title="净收入"
+          :value="summary.netAmount"
+          prefix="¥"
+          :precision="2"
+          icon="fund"
+          color="#722ed1"
+          :loading="loading"
+        />
+      </a-col>
+    </a-row>
 
-    <!-- 风险指标区域 -->
-    <div class="risk-section">
-      <a-row :gutter="[16, 16]">
-        <a-col :xs="24" :sm="12" :md="8" v-for="risk in riskData" :key="risk.key">
-          <RiskCard
-            :title="risk.title"
-            :value="risk.value"
-            :level="risk.level"
-            :description="risk.description"
-            :threshold="risk.threshold"
-          />
-        </a-col>
-      </a-row>
-    </div>
+    <!-- 风险指标区 - 第二行 -->
+    <a-row :gutter="16" class="risk-row">
+      <a-col :xs="24" :sm="12" :md="6" :lg="6">
+        <RiskCard
+          title="人数退费率"
+          :value="summary.refundRateByCount"
+          type="warning"
+          description="= 退费人数 ÷ 缴费人数"
+          :loading="loading"
+        />
+      </a-col>
+      <a-col :xs="24" :sm="12" :md="6" :lg="6">
+        <RiskCard
+          title="金额退费率"
+          :value="summary.refundRateByAmount"
+          type="danger"
+          description="= 退费金额 ÷ 缴费金额"
+          :loading="loading"
+        />
+      </a-col>
+      <a-col :xs="24" :sm="24" :md="12" :lg="12">
+        <a-card class="explanation-card" :bordered="false">
+          <div class="explanation-title">
+            <InfoCircleOutlined /> 口径说明
+          </div>
+          <div class="explanation-content">
+            <p><strong>人数退费率</strong>：用于教务/班主任管理，反映学员流失情况</p>
+            <p><strong>金额退费率</strong>：用于财务/现金流风险评估，反映资金回收风险</p>
+          </div>
+        </a-card>
+      </a-col>
+    </a-row>
 
-    <!-- 图表区域 -->
-    <a-row :gutter="[16, 16]" class="chart-section">
-      <a-col :xs="24" :lg="16">
-        <a-card title="收入趋势" :bordered="false" class="chart-card">
-          <LineChart
-            :chartData="lineChartData"
-            :loading="chartLoading"
-            height="350px"
+    <!-- 图表区 -->
+    <a-row :gutter="16" class="chart-row">
+      <a-col :xs="24" :sm="24" :md="8" :lg="8">
+        <a-card title="班级类型占比（N/R）" :bordered="false" :loading="loading">
+          <template #extra>
+            <a-tooltip title="N=新开班，R=续费班">
+              <QuestionCircleOutlined />
+            </a-tooltip>
+          </template>
+          <PieChart
+            :data="classTypePieData"
+            :config="pieChartConfig"
+            height="320px"
           />
         </a-card>
       </a-col>
-      <a-col :xs="24" :lg="8">
-        <a-card title="收入构成" :bordered="false" class="chart-card">
-          <PieChart
-            :chartData="pieChartData"
-            :loading="chartLoading"
-            height="350px"
+      <a-col :xs="24" :sm="24" :md="16" :lg="16">
+        <a-card title="月度净收入趋势" :bordered="false" :loading="loading">
+          <template #extra>
+            <a-tooltip title="按月统计净收入变化趋势">
+              <QuestionCircleOutlined />
+            </a-tooltip>
+          </template>
+          <LineChart
+            :data="monthlyLineData"
+            :config="lineChartConfig"
+            height="320px"
           />
         </a-card>
       </a-col>
     </a-row>
 
-    <!-- 排行榜区域 -->
-    <a-row :gutter="[16, 16]" class="rank-section">
-      <a-col :xs="24" :lg="12">
-        <a-card title="班主任业绩排行 TOP10" :bordered="false" class="rank-card">
-          <TeacherRankTable :dataSource="teacherRankData" :loading="tableLoading" />
+    <!-- 表格排行区 -->
+    <a-row :gutter="16" class="table-row">
+      <a-col :xs="24" :sm="24" :md="12" :lg="12">
+        <a-card title="班主任绩效（Top）" :bordered="false" :loading="loading">
+          <template #extra>
+            <a-tooltip title="按实缴金额排序">
+              <TrophyOutlined style="color: #faad14" />
+            </a-tooltip>
+          </template>
+          <TeacherRankTable
+            :data="teacherRankData"
+            :loading="loading"
+            :page-size="8"
+          />
         </a-card>
       </a-col>
-      <a-col :xs="24" :lg="12">
-        <a-card title="班级收入排行 TOP10" :bordered="false" class="rank-card">
-          <ClassRankTable :dataSource="classRankData" :loading="tableLoading" />
+      <a-col :xs="24" :sm="24" :md="12" :lg="12">
+        <a-card title="班级经营（Top）" :bordered="false" :loading="loading">
+          <template #extra>
+            <a-tooltip title="按净收入排序">
+              <BarChartOutlined style="color: #1890ff" />
+            </a-tooltip>
+          </template>
+          <ClassRankTable
+            :data="classRankData"
+            :loading="loading"
+            :page-size="8"
+          />
         </a-card>
       </a-col>
     </a-row>
@@ -131,392 +211,361 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
-import { SearchOutlined, ReloadOutlined } from '@ant-design/icons-vue'
-import type { Dayjs } from 'dayjs'
-import dayjs from 'dayjs'
+import { ref, reactive, computed, onMounted } from 'vue'
+import { message } from 'ant-design-vue'
+import {
+  SearchOutlined,
+  ReloadOutlined,
+  InfoCircleOutlined,
+  QuestionCircleOutlined,
+  TrophyOutlined,
+  BarChartOutlined
+} from '@ant-design/icons-vue'
+import dayjs, { Dayjs } from 'dayjs'
 
-// 组件导入
-import KPICard from '@/components/KPICard.vue'
+// API
+import { getMeta, type MetaData } from '@/api/meta'
+import {
+  getSummary,
+  getClassType,
+  getMonthlyTrend,
+  getTeacherRank,
+  getClassRank,
+  type SummaryData,
+  type ClassTypeData,
+  type MonthlyTrendItem,
+  type TeacherRankItem,
+  type ClassRankItem,
+  type DashboardQueryParams
+} from '@/api/dashboard'
+
+// 组件
+import KpiCard from '@/components/KpiCard.vue'
 import RiskCard from '@/components/RiskCard.vue'
-import LineChart from '@/components/LineChart.vue'
 import PieChart from '@/components/PieChart.vue'
+import LineChart from '@/components/LineChart.vue'
 import TeacherRankTable from '@/components/TeacherRankTable.vue'
 import ClassRankTable from '@/components/ClassRankTable.vue'
 
-// 类型定义
-interface FilterForm {
-  dateRange: [Dayjs, Dayjs] | null
-  campus: string | undefined
+// 类型
+import type { PieChartData, PieChartConfig, LineChartData, LineChartConfig } from '@/types'
+
+// ============================================================
+// 状态定义
+// ============================================================
+
+// 加载状态
+const loading = ref(false)
+const metaLoading = ref(false)
+
+// 筛选条件
+const filters = reactive<{
+  range: [Dayjs, Dayjs]
+  campusId: string | undefined
   courseType: string | undefined
-}
-
-interface KPIItem {
-  key: string
-  title: string
-  value: number
-  prefix?: string
-  suffix?: string
-  trend: 'up' | 'down' | 'flat'
-  trendValue: string
-  icon: string
-  color: string
-}
-
-interface RiskItem {
-  key: string
-  title: string
-  value: number
-  level: 'high' | 'medium' | 'low'
-  description: string
-  threshold: number
-}
-
-interface SelectOption {
-  label: string
-  value: string
-}
-
-// 筛选表单
-const filterForm = reactive<FilterForm>({
-  dateRange: [dayjs().subtract(30, 'day'), dayjs()],
-  campus: undefined,
+}>({
+  range: [dayjs().startOf('month'), dayjs().endOf('month')],
+  campusId: undefined,
   courseType: undefined
 })
 
-// 加载状态
-const chartLoading = ref(false)
-const tableLoading = ref(false)
-
-// 下拉选项 Mock 数据
-const campusOptions = ref<SelectOption[]>([
-  { label: '全部校区', value: '' },
-  { label: '北京总部', value: 'beijing' },
-  { label: '上海分校', value: 'shanghai' },
-  { label: '广州分校', value: 'guangzhou' },
-  { label: '深圳分校', value: 'shenzhen' },
-  { label: '杭州分校', value: 'hangzhou' }
-])
-
-const courseTypeOptions = ref<SelectOption[]>([
-  { label: '全部课型', value: '' },
-  { label: '一对一', value: 'one2one' },
-  { label: '小班课', value: 'small' },
-  { label: '大班课', value: 'large' },
-  { label: '线上课', value: 'online' },
-  { label: '寒暑假班', value: 'vacation' }
-])
-
-// KPI Mock 数据
-const kpiData = ref<KPIItem[]>([
-  {
-    key: 'totalRevenue',
-    title: '总收入',
-    value: 5862340,
-    prefix: '¥',
-    trend: 'up',
-    trendValue: '+12.5%',
-    icon: 'money-collect',
-    color: '#1890ff'
-  },
-  {
-    key: 'newEnrollment',
-    title: '新签金额',
-    value: 2345680,
-    prefix: '¥',
-    trend: 'up',
-    trendValue: '+8.3%',
-    icon: 'user-add',
-    color: '#52c41a'
-  },
-  {
-    key: 'renewalAmount',
-    title: '续费金额',
-    value: 1876540,
-    prefix: '¥',
-    trend: 'down',
-    trendValue: '-3.2%',
-    icon: 'sync',
-    color: '#faad14'
-  },
-  {
-    key: 'refundAmount',
-    title: '退费金额',
-    value: 359880,
-    prefix: '¥',
-    trend: 'down',
-    trendValue: '-5.8%',
-    icon: 'rollback',
-    color: '#ff4d4f'
-  },
-  {
-    key: 'studentCount',
-    title: '在读学员',
-    value: 3256,
-    suffix: '人',
-    trend: 'up',
-    trendValue: '+156',
-    icon: 'team',
-    color: '#722ed1'
-  },
-  {
-    key: 'classCount',
-    title: '开班数量',
-    value: 186,
-    suffix: '个',
-    trend: 'up',
-    trendValue: '+12',
-    icon: 'book',
-    color: '#13c2c2'
-  },
-  {
-    key: 'avgClassPrice',
-    title: '班均收入',
-    value: 31517,
-    prefix: '¥',
-    trend: 'up',
-    trendValue: '+6.7%',
-    icon: 'bar-chart',
-    color: '#eb2f96'
-  },
-  {
-    key: 'renewalRate',
-    title: '续费率',
-    value: 72.5,
-    suffix: '%',
-    trend: 'flat',
-    trendValue: '+0.3%',
-    icon: 'percentage',
-    color: '#fa8c16'
-  }
-])
-
-// 风险指标 Mock 数据
-const riskData = ref<RiskItem[]>([
-  {
-    key: 'refundRate',
-    title: '退费率',
-    value: 6.14,
-    level: 'medium',
-    description: '较上月上升0.5%，需关注退费原因',
-    threshold: 5
-  },
-  {
-    key: 'overdueFee',
-    title: '逾期未收款',
-    value: 128650,
-    level: 'high',
-    description: '超过30天未回款金额，涉及23个订单',
-    threshold: 100000
-  },
-  {
-    key: 'consumptionRate',
-    title: '课消完成率',
-    value: 85.3,
-    level: 'low',
-    description: '本月课消进度良好，预计可完成目标',
-    threshold: 80
-  }
-])
-
-// 折线图 Mock 数据
-const lineChartData = ref({
-  xAxis: [
-    '1月', '2月', '3月', '4月', '5月', '6月',
-    '7月', '8月', '9月', '10月', '11月', '12月'
-  ],
-  series: [
-    {
-      name: '总收入',
-      data: [420, 380, 450, 520, 580, 620, 680, 750, 620, 580, 540, 586],
-      color: '#1890ff'
-    },
-    {
-      name: '新签',
-      data: [180, 160, 200, 240, 280, 300, 320, 380, 280, 240, 220, 234],
-      color: '#52c41a'
-    },
-    {
-      name: '续费',
-      data: [150, 140, 160, 180, 200, 220, 240, 260, 220, 200, 190, 187],
-      color: '#faad14'
-    },
-    {
-      name: '退费',
-      data: [30, 28, 35, 40, 45, 50, 55, 60, 48, 42, 38, 36],
-      color: '#ff4d4f'
-    }
-  ],
-  unit: '万元'
+// 元数据
+const metaData = reactive<MetaData>({
+  campuses: [],
+  courseTypes: []
 })
 
-// 饼图 Mock 数据
-const pieChartData = ref({
-  series: [
-    { name: '一对一', value: 1856340, color: '#1890ff' },
-    { name: '小班课', value: 1523680, color: '#52c41a' },
-    { name: '大班课', value: 986450, color: '#faad14' },
-    { name: '线上课', value: 756230, color: '#722ed1' },
-    { name: '寒暑假班', value: 739640, color: '#13c2c2' }
+// KPI 数据
+const summary = reactive<SummaryData>({
+  payCount: 0,
+  payAmount: 0,
+  refundCount: 0,
+  refundAmount: 0,
+  netAmount: 0,
+  refundRateByCount: 0,
+  refundRateByAmount: 0
+})
+
+// 班级类型数据
+const classTypeData = reactive<ClassTypeData>({
+  newCount: 0,
+  renewCount: 0,
+  newPayAmount: 0,
+  renewPayAmount: 0,
+  newStudentCount: 0,
+  renewStudentCount: 0
+})
+
+
+// 月度趋势数据
+const monthlyTrendData = ref<MonthlyTrendItem[]>([])
+
+// 班主任排行数据
+const teacherRankData = ref<TeacherRankItem[]>([])
+
+// 班级排行数据
+const classRankData = ref<ClassRankItem[]>([])
+
+// ============================================================
+// 计算属性 - 图表数据转换
+// ============================================================
+
+// 饼图数据
+const classTypePieData = computed<PieChartData>(() => ({
+  items: [
+    { name: '新开班 (N)', value: classTypeData.newCount },
+    { name: '续费班 (R)', value: classTypeData.renewCount }
   ]
-})
+}))
 
-// 班主任排行 Mock 数据
-const teacherRankData = ref([
-  { rank: 1, name: '张老师', campus: '北京总部', revenue: 456780, studentCount: 45, renewalRate: 85.5 },
-  { rank: 2, name: '李老师', campus: '上海分校', revenue: 423560, studentCount: 42, renewalRate: 82.3 },
-  { rank: 3, name: '王老师', campus: '北京总部', revenue: 398450, studentCount: 38, renewalRate: 79.8 },
-  { rank: 4, name: '陈老师', campus: '广州分校', revenue: 365230, studentCount: 35, renewalRate: 76.5 },
-  { rank: 5, name: '刘老师', campus: '深圳分校', revenue: 342180, studentCount: 33, renewalRate: 74.2 },
-  { rank: 6, name: '赵老师', campus: '杭州分校', revenue: 318760, studentCount: 31, renewalRate: 71.8 },
-  { rank: 7, name: '周老师', campus: '北京总部', revenue: 295430, studentCount: 29, renewalRate: 69.5 },
-  { rank: 8, name: '吴老师', campus: '上海分校', revenue: 278650, studentCount: 27, renewalRate: 67.3 },
-  { rank: 9, name: '郑老师', campus: '广州分校', revenue: 256890, studentCount: 25, renewalRate: 65.1 },
-  { rank: 10, name: '孙老师', campus: '深圳分校', revenue: 234560, studentCount: 23, renewalRate: 62.8 }
-])
-
-// 班级排行 Mock 数据
-const classRankData = ref([
-  { rank: 1, className: '高三冲刺A班', teacher: '张老师', revenue: 186540, studentCount: 25, avgPrice: 7462 },
-  { rank: 2, className: '初三提高B班', teacher: '李老师', revenue: 165230, studentCount: 22, avgPrice: 7511 },
-  { rank: 3, className: '高一培优班', teacher: '王老师', revenue: 152680, studentCount: 20, avgPrice: 7634 },
-  { rank: 4, className: '初二基础班', teacher: '陈老师', revenue: 138450, studentCount: 23, avgPrice: 6020 },
-  { rank: 5, className: '高二实验班', teacher: '刘老师', revenue: 125630, studentCount: 18, avgPrice: 6980 },
-  { rank: 6, className: '小升初衔接班', teacher: '赵老师', revenue: 118760, studentCount: 24, avgPrice: 4948 },
-  { rank: 7, className: '高三艺考班', teacher: '周老师', revenue: 105430, studentCount: 15, avgPrice: 7029 },
-  { rank: 8, className: '初一预备班', teacher: '吴老师', revenue: 98650, studentCount: 26, avgPrice: 3794 },
-  { rank: 9, className: '中考冲刺班', teacher: '郑老师', revenue: 92340, studentCount: 20, avgPrice: 4617 },
-  { rank: 10, className: '高考复读班', teacher: '孙老师', revenue: 86780, studentCount: 12, avgPrice: 7232 }
-])
-
-// 方法定义
-const handleFilterChange = () => {
-  console.log('Filter changed:', filterForm)
+// 饼图配置
+const pieChartConfig: PieChartConfig = {
+  showLegend: true,
+  legendPosition: 'bottom',
+  showTooltip: true,
+  showLabel: true,
+  labelPosition: 'outside',
+  labelFormat: 'namePercent',
+  radius: ['40%', '70%'],
+  colors: ['#1890ff', '#52c41a'],
+  animation: true,
+  borderRadius: 4
 }
 
-const handleSearch = () => {
-  chartLoading.value = true
-  tableLoading.value = true
+// 折线图数据
+const monthlyLineData = computed<LineChartData>(() => ({
+  xAxis: monthlyTrendData.value.map((item) => item.month),
+  series: [
+    {
+      name: '净收入',
+      data: monthlyTrendData.value.map((item) => item.netAmount),
+      type: 'line',
+      smooth: true,
+      areaStyle: {
+        opacity: 0.3
+      },
+      itemStyle: {
+        color: '#722ed1'
+      }
+    }
+  ]
+}))
 
-  // 模拟异步加载
-  setTimeout(() => {
-    chartLoading.value = false
-    tableLoading.value = false
-    console.log('Search with filters:', {
-      dateRange: filterForm.dateRange?.map(d => d.format('YYYY-MM-DD')),
-      campus: filterForm.campus,
-      courseType: filterForm.courseType
-    })
-  }, 500)
+// 折线图配置
+const lineChartConfig: LineChartConfig = {
+  showLegend: true,
+  legendPosition: 'top',
+  showTooltip: true,
+  showGrid: true,
+  gridConfig: {
+    left: '3%',
+    right: '4%',
+    bottom: '3%',
+    containLabel: true
+  },
+  yAxisConfig: {
+    name: '金额（元）'
+  },
+  colors: ['#722ed1'],
+  animation: true
 }
 
-const handleReset = () => {
-  filterForm.dateRange = [dayjs().subtract(30, 'day'), dayjs()]
-  filterForm.campus = undefined
-  filterForm.courseType = undefined
-  handleSearch()
+// ============================================================
+// 方法
+// ============================================================
+
+/**
+ * 构建查询参数
+ */
+function buildQueryParams(): DashboardQueryParams {
+  const [start, end] = filters.range
+  return {
+    startDate: start.format('YYYY-MM-DD'),
+    endDate: end.format('YYYY-MM-DD'),
+    campusId: filters.campusId,
+    courseType: filters.courseType
+  }
 }
 
-// 初始化加载
-onMounted(() => {
-  handleSearch()
+/**
+ * 加载元数据
+ */
+async function loadMeta(): Promise<void> {
+  metaLoading.value = true
+  try {
+    const data = await getMeta()
+    metaData.campuses = data.campuses
+    metaData.courseTypes = data.courseTypes
+  } catch (error) {
+    console.error('加载元数据失败:', error)
+    message.error('加载筛选选项失败，请刷新重试')
+  } finally {
+    metaLoading.value = false
+  }
+}
+
+/**
+ * 加载所有 Dashboard 数据
+ */
+async function loadDashboardData(): Promise<void> {
+  loading.value = true
+  const params = buildQueryParams()
+
+  try {
+    // 并发请求所有数据
+    const [summaryRes, classTypeRes, monthlyRes, teacherRes, classRes] =
+      await Promise.all([
+        getSummary(params),
+        getClassType(params),
+        getMonthlyTrend(params),
+        getTeacherRank(params),
+        getClassRank(params)
+      ])
+
+    // 更新 KPI 数据
+    if (summaryRes.code === 0) {
+      Object.assign(summary, summaryRes.data)
+    }
+
+    // 更新班级类型数据
+    if (classTypeRes.code === 0) {
+      Object.assign(classTypeData, classTypeRes.data)
+    }
+
+    // 更新月度趋势数据
+    if (monthlyRes.code === 0) {
+      monthlyTrendData.value = monthlyRes.data.items || []
+    }
+
+    // 更新班主任排行数据
+    if (teacherRes.code === 0) {
+      teacherRankData.value = teacherRes.data.items || []
+    }
+
+    // 更新班级排行数据
+    if (classRes.code === 0) {
+      classRankData.value = classRes.data.items || []
+    }
+  } catch (error) {
+    console.error('加载 Dashboard 数据失败:', error)
+    message.error('加载数据失败，请稍后重试')
+  } finally {
+    loading.value = false
+  }
+}
+
+/**
+ * 查询按钮点击
+ */
+function handleQuery(): void {
+  loadDashboardData()
+}
+
+/**
+ * 重置按钮点击
+ */
+function handleReset(): void {
+  filters.range = [dayjs().startOf('month'), dayjs().endOf('month')]
+  filters.campusId = undefined
+  filters.courseType = undefined
+  loadDashboardData()
+}
+
+// ============================================================
+// 生命周期
+// ============================================================
+
+onMounted(async () => {
+  // 并发加载元数据和 Dashboard 数据
+  await Promise.all([loadMeta(), loadDashboardData()])
 })
 </script>
 
-<style lang="less" scoped>
+<style scoped>
 .dashboard-container {
-  padding: 24px;
-  background: #f0f2f5;
-  min-height: 100vh;
+  padding: 16px;
+  background-color: #f0f2f5;
+  min-height: calc(100vh - 64px);
 }
 
 .filter-card {
-  margin-bottom: 24px;
+  margin-bottom: 16px;
   border-radius: 8px;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
-
-  :deep(.ant-card-body) {
-    padding: 16px 24px;
-  }
-
-  :deep(.ant-form-item) {
-    margin-bottom: 0;
-  }
 }
 
-.kpi-section {
-  margin-bottom: 24px;
+.filter-label {
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: rgba(0, 0, 0, 0.85);
 }
 
-.risk-section {
-  margin-bottom: 24px;
+.kpi-row {
+  margin-bottom: 16px;
 }
 
-.chart-section {
-  margin-bottom: 24px;
-
-  .chart-card {
-    border-radius: 8px;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
-    height: 100%;
-
-    :deep(.ant-card-head) {
-      border-bottom: 1px solid #f0f0f0;
-    }
-
-    :deep(.ant-card-body) {
-      padding: 16px;
-    }
-  }
+.kpi-row .ant-col {
+  margin-bottom: 16px;
 }
 
-.rank-section {
-  .rank-card {
-    border-radius: 8px;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
-
-    :deep(.ant-card-head) {
-      border-bottom: 1px solid #f0f0f0;
-    }
-
-    :deep(.ant-card-body) {
-      padding: 0;
-    }
-  }
+.risk-row {
+  margin-bottom: 16px;
 }
 
-// 响应式布局
+.risk-row .ant-col {
+  margin-bottom: 16px;
+}
+
+.explanation-card {
+  height: 100%;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #e6f7ff 0%, #f0f5ff 100%);
+}
+
+.explanation-title {
+  font-weight: 600;
+  font-size: 14px;
+  color: #1890ff;
+  margin-bottom: 12px;
+}
+
+.explanation-content {
+  color: rgba(0, 0, 0, 0.65);
+  line-height: 1.8;
+}
+
+.explanation-content p {
+  margin-bottom: 4px;
+}
+
+.chart-row {
+  margin-bottom: 16px;
+}
+
+.chart-row .ant-col {
+  margin-bottom: 16px;
+}
+
+.chart-row .ant-card {
+  border-radius: 8px;
+  height: 100%;
+}
+
+.table-row .ant-col {
+  margin-bottom: 16px;
+}
+
+.table-row .ant-card {
+  border-radius: 8px;
+}
+
+/* 响应式调整 */
 @media (max-width: 768px) {
   .dashboard-container {
     padding: 12px;
   }
 
-  .filter-card {
-    :deep(.ant-form-inline .ant-form-item) {
-      margin-bottom: 12px;
-      width: 100%;
-
-      .ant-form-item-control {
-        flex: 1;
-      }
-    }
-
-    :deep(.ant-picker),
-    :deep(.ant-select) {
-      width: 100% !important;
-    }
-  }
-}
-
-@media (max-width: 576px) {
-  .dashboard-container {
-    padding: 8px;
-  }
-
-  .filter-card,
-  .chart-section .chart-card,
-  .rank-section .rank-card {
-    border-radius: 4px;
+  .filter-label {
+    margin-top: 12px;
   }
 }
 </style>

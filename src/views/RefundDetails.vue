@@ -1,532 +1,459 @@
 <template>
-  <div class="refund-details">
-    <div class="page-header">
-      <h2>退费明细</h2>
-      <a-space>
-        <a-range-picker
-          v-model:value="dateRange"
-          :placeholder="['开始日期', '结束日期']"
-          style="width: 260px"
-        />
-        <a-button type="primary" @click="showAddModal">
-          <template #icon><PlusOutlined /></template>
-          申请退费
-        </a-button>
-      </a-space>
-    </div>
+  <div class="refund-details-page">
+    <!-- 筛选区 -->
+    <a-card :bordered="false" style="margin-bottom: 16px;">
+      <div class="filter-title">退费明细统计表</div>
+      <div class="filter-subtitle">用途：退费原因分析、风控、异常监控</div>
 
-    <!-- 统计卡片 -->
-    <a-row :gutter="[16, 16]" class="stats-section">
-      <a-col :xs="12" :sm="6">
-        <a-card>
-          <a-statistic title="本月退费总额" prefix="¥" :value="statistics.monthTotal" :precision="2" :value-style="{ color: '#ff4d4f' }" />
-        </a-card>
-      </a-col>
-      <a-col :xs="12" :sm="6">
-        <a-card>
-          <a-statistic title="退费笔数" :value="statistics.count" suffix="笔" />
-        </a-card>
-      </a-col>
-      <a-col :xs="12" :sm="6">
-        <a-card>
-          <a-statistic title="待审核" :value="statistics.pending" suffix="笔" :value-style="{ color: '#faad14' }" />
-        </a-card>
-      </a-col>
-      <a-col :xs="12" :sm="6">
-        <a-card>
-          <a-statistic title="退费率" :value="statistics.rate" suffix="%" :precision="1" />
-        </a-card>
-      </a-col>
-    </a-row>
-
-    <!-- 退费原因分布图 -->
-    <a-row :gutter="[16, 16]" class="chart-section">
-      <a-col :xs="24" :lg="12">
-        <a-card title="退费原因分布" :bordered="false">
-          <div ref="pieChartRef" class="chart-container"></div>
-        </a-card>
-      </a-col>
-      <a-col :xs="24" :lg="12">
-        <a-card title="月度退费趋势" :bordered="false">
-          <div ref="lineChartRef" class="chart-container"></div>
-        </a-card>
-      </a-col>
-    </a-row>
-
-    <!-- 退费记录表格 -->
-    <a-card title="退费记录" :bordered="false">
-      <template #extra>
-        <a-space>
-          <a-select
-            v-model:value="statusFilter"
-            placeholder="审核状态"
-            style="width: 120px"
-            allowClear
-          >
-            <a-select-option value="pending">待审核</a-select-option>
-            <a-select-option value="approved">已批准</a-select-option>
-            <a-select-option value="rejected">已拒绝</a-select-option>
-            <a-select-option value="completed">已完成</a-select-option>
-          </a-select>
-          <a-input-search
-            v-model:value="searchText"
-            placeholder="搜索学生姓名"
-            style="width: 180px"
+      <a-row :gutter="[12, 12]" style="margin-top: 16px;">
+        <a-col :xs="24" :sm="12" :md="8" :lg="6">
+          <div class="filter-label">退费日期范围</div>
+          <a-range-picker
+            v-model:value="filters.range"
+            style="width: 100%;"
+            :disabled="loading"
           />
-        </a-space>
-      </template>
+        </a-col>
 
+        <a-col :xs="24" :sm="12" :md="8" :lg="6">
+          <div class="filter-label">校区（可选）</div>
+          <a-select
+            v-model:value="filters.campusId"
+            allowClear
+            placeholder="全部校区"
+            style="width: 100%;"
+            :disabled="loading"
+          >
+            <a-select-option v-for="c in meta.campuses" :key="c.id" :value="c.id">
+              {{ c.name }}
+            </a-select-option>
+          </a-select>
+        </a-col>
+
+        <a-col :xs="24" :sm="12" :md="8" :lg="6">
+          <div class="filter-label">课型（可选）</div>
+          <a-select
+            v-model:value="filters.courseType"
+            allowClear
+            placeholder="全部课型"
+            style="width: 100%;"
+            :disabled="loading"
+          >
+            <a-select-option v-for="t in meta.courseTypes" :key="t" :value="t">
+              {{ t }}
+            </a-select-option>
+          </a-select>
+        </a-col>
+
+        <a-col :xs="24" :sm="12" :md="8" :lg="6">
+          <div class="filter-label">班级ID（可选）</div>
+          <a-input
+            v-model:value="filters.classId"
+            placeholder="输入班级ID"
+            allowClear
+            :disabled="loading"
+          />
+        </a-col>
+
+        <a-col :xs="24" :sm="12" :md="8" :lg="6">
+          <div class="filter-label">班主任ID（可选）</div>
+          <a-input
+            v-model:value="filters.teacherId"
+            placeholder="输入班主任ID"
+            allowClear
+            :disabled="loading"
+          />
+        </a-col>
+      </a-row>
+
+      <a-row style="margin-top: 16px;">
+        <a-space>
+          <a-button type="primary" :loading="loading" @click="handleSearch">
+            <template #icon><SearchOutlined /></template>
+            查询
+          </a-button>
+          <a-button :disabled="loading" @click="handleReset">
+            <template #icon><ReloadOutlined /></template>
+            重置
+          </a-button>
+          <a-button
+            :disabled="loading || !dataSource.length"
+            @click="handleExport"
+            danger
+          >
+            <template #icon><DownloadOutlined /></template>
+            导出当前页
+          </a-button>
+        </a-space>
+      </a-row>
+    </a-card>
+
+    <!-- 风险指标卡片 -->
+    <a-card :bordered="false" style="margin-bottom: 16px;">
+      <a-row :gutter="16">
+        <a-col :xs="12" :sm="8" :md="6">
+          <a-statistic
+            title="总退费人数"
+            :value="summary.totalRefundCount"
+            :value-style="{ color: '#ff4d4f' }"
+          />
+        </a-col>
+        <a-col :xs="12" :sm="8" :md="6">
+          <a-statistic
+            title="总退费金额"
+            :value="summary.totalRefundAmount"
+            :precision="2"
+            suffix="元"
+            :value-style="{ color: '#ff4d4f' }"
+          />
+        </a-col>
+        <a-col :xs="12" :sm="8" :md="6">
+          <a-statistic
+            title="退费记录条数"
+            :value="pagination.total"
+            :value-style="{ color: '#faad14' }"
+          />
+        </a-col>
+        <a-col :xs="12" :sm="8" :md="6">
+          <a-statistic
+            title="人均退费"
+            :value="summary.avgRefundAmount"
+            :precision="2"
+            suffix="元"
+          />
+        </a-col>
+      </a-row>
+    </a-card>
+
+    <!-- 数据表格 -->
+    <a-card :bordered="false">
       <a-table
         :columns="columns"
-        :data-source="filteredData"
-        :pagination="pagination"
+        :data-source="dataSource"
         :loading="loading"
+        :pagination="pagination"
+        :scroll="{ x: 1200 }"
         row-key="id"
-        :scroll="{ x: 1400 }"
+        @change="handleTableChange"
       >
         <template #bodyCell="{ column, record }">
-          <template v-if="column.key === 'studentName'">
-            <a-space>
-              <a-avatar size="small" :style="{ backgroundColor: '#ff4d4f' }">
-                {{ record.studentName.charAt(0) }}
-              </a-avatar>
-              {{ record.studentName }}
-            </a-space>
+          <template v-if="column.key === 'refundDate'">
+            <span>{{ formatDate(record.refundDate) }}</span>
           </template>
-          <template v-if="column.key === 'originalAmount'">
-            <span>¥{{ record.originalAmount.toLocaleString() }}</span>
+          <template v-else-if="column.key === 'refundAmount'">
+            <span style="color: #ff4d4f; font-weight: 500;">
+              ¥{{ formatNumber(record.refundAmount) }}
+            </span>
           </template>
-          <template v-if="column.key === 'refundAmount'">
-            <span style="color: #ff4d4f; font-weight: 500">¥{{ record.refundAmount.toLocaleString() }}</span>
+          <template v-else-if="column.key === 'className'">
+            <a-tag color="orange">{{ record.className }}</a-tag>
           </template>
-          <template v-if="column.key === 'status'">
-            <a-tag :color="getStatusColor(record.status)">
-              {{ getStatusText(record.status) }}
+          <template v-else-if="column.key === 'refundReason'">
+            <a-tooltip v-if="record.refundReason" :title="record.refundReason">
+              <span style="cursor: help;">
+                {{ truncateText(record.refundReason, 20) }}
+              </span>
+            </a-tooltip>
+            <span v-else style="color: rgba(0,0,0,0.25);">-</span>
+          </template>
+          <template v-else-if="column.key === 'risk'">
+            <a-tag v-if="record.refundCount >= 3" color="red">
+              高风险
             </a-tag>
-          </template>
-          <template v-if="column.key === 'action'">
-            <a-space>
-              <a-button type="link" size="small" @click="viewDetail(record)">详情</a-button>
-              <a-button
-                v-if="record.status === 'pending'"
-                type="link"
-                size="small"
-                @click="approveRefund(record)"
-              >
-                审核
-              </a-button>
-              <a-button
-                v-if="record.status === 'approved'"
-                type="link"
-                size="small"
-                @click="processRefund(record)"
-              >
-                处理退款
-              </a-button>
-            </a-space>
+            <a-tag v-else-if="record.refundCount >= 2" color="orange">
+              中风险
+            </a-tag>
+            <a-tag v-else color="green">
+              正常
+            </a-tag>
           </template>
         </template>
       </a-table>
     </a-card>
-
-    <!-- 申请退费弹窗 -->
-    <a-modal
-      v-model:open="modalVisible"
-      title="申请退费"
-      width="600px"
-      @ok="handleModalOk"
-      @cancel="handleModalCancel"
-    >
-      <a-form
-        :model="refundForm"
-        :label-col="{ span: 6 }"
-        :wrapper-col="{ span: 16 }"
-      >
-        <a-form-item label="学生姓名" required>
-          <a-select
-            v-model:value="refundForm.studentId"
-            placeholder="请选择学生"
-            show-search
-            :filter-option="filterOption"
-          >
-            <a-select-option v-for="s in studentOptions" :key="s.id" :value="s.id">
-              {{ s.name }} ({{ s.class }})
-            </a-select-option>
-          </a-select>
-        </a-form-item>
-        <a-form-item label="退费类型" required>
-          <a-select v-model:value="refundForm.type" placeholder="请选择退费类型">
-            <a-select-option value="full">全额退费</a-select-option>
-            <a-select-option value="partial">部分退费</a-select-option>
-          </a-select>
-        </a-form-item>
-        <a-form-item label="原缴费金额">
-          <a-input-number
-            v-model:value="refundForm.originalAmount"
-            :min="0"
-            :precision="2"
-            prefix="¥"
-            style="width: 100%"
-            disabled
-          />
-        </a-form-item>
-        <a-form-item label="申请退费金额" required>
-          <a-input-number
-            v-model:value="refundForm.refundAmount"
-            :min="0"
-            :max="refundForm.originalAmount"
-            :precision="2"
-            prefix="¥"
-            style="width: 100%"
-          />
-        </a-form-item>
-        <a-form-item label="退费原因" required>
-          <a-select v-model:value="refundForm.reason" placeholder="请选择退费原因">
-            <a-select-option value="personal">个人原因</a-select-option>
-            <a-select-option value="schedule">时间冲突</a-select-option>
-            <a-select-option value="quality">教学质量</a-select-option>
-            <a-select-option value="transfer">转班</a-select-option>
-            <a-select-option value="other">其他</a-select-option>
-          </a-select>
-        </a-form-item>
-        <a-form-item label="详细说明">
-          <a-textarea
-            v-model:value="refundForm.description"
-            :rows="3"
-            placeholder="请输入详细说明"
-          />
-        </a-form-item>
-      </a-form>
-    </a-modal>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
-import { message } from 'ant-design-vue'
-import { PlusOutlined } from '@ant-design/icons-vue'
-import * as echarts from 'echarts'
-import type { Dayjs } from 'dayjs'
+import { reactive, ref, onMounted, computed } from 'vue';
+import { message } from 'ant-design-vue';
+import { SearchOutlined, ReloadOutlined, DownloadOutlined } from '@ant-design/icons-vue';
+import dayjs, { Dayjs } from 'dayjs';
+import type { TableProps, TablePaginationConfig } from 'ant-design-vue';
+import { getRefundDetails } from '@/api/dashboard';
+import type { RefundDetailItem, RefundDetailsQueryParams } from '@/api/dashboard';
+import { getMeta } from '@/api/meta';
+import type { Campus } from '@/api/meta';
 
-interface RefundRecord {
-  id: string
-  studentName: string
-  studentId: string
-  className: string
-  originalAmount: number
-  refundAmount: number
-  reason: string
-  status: string
-  applyTime: string
-  approveTime: string
-  completeTime: string
-  operator: string
-  remark: string
-}
+// ============================================================
+// 数据状态
+// ============================================================
 
-// 日期范围和筛选
-const dateRange = ref<[Dayjs, Dayjs] | null>(null)
-const statusFilter = ref<string | undefined>(undefined)
-const searchText = ref('')
-const loading = ref(false)
+const loading = ref(false);
 
-// 统计数据
-const statistics = reactive({
-  monthTotal: 45680,
-  count: 12,
-  pending: 3,
-  rate: 2.8
-})
+const meta = reactive({
+  campuses: [] as Campus[],
+  courseTypes: ['PS', 'S', 'KET', 'PET', 'FCE', 'CAE'] as string[],
+});
 
-// 分页配置
-const pagination = reactive({
+const filters = reactive<{
+  range: [Dayjs, Dayjs] | null;
+  campusId?: string;
+  courseType?: string;
+  classId?: string;
+  teacherId?: string;
+}>({
+  range: [dayjs().startOf('month'), dayjs().endOf('month')],
+  campusId: undefined,
+  courseType: undefined,
+  classId: undefined,
+  teacherId: undefined,
+});
+
+const dataSource = ref<RefundDetailItem[]>([]);
+
+const pagination = reactive<TablePaginationConfig>({
   current: 1,
-  pageSize: 10,
-  total: 12
-})
+  pageSize: 20,
+  total: 0,
+  showSizeChanger: true,
+  showQuickJumper: true,
+  showTotal: (total: number) => `共 ${total} 条记录`,
+  pageSizeOptions: ['10', '20', '50', '100'],
+});
 
-// 图表 refs
-const pieChartRef = ref<HTMLElement | null>(null)
-const lineChartRef = ref<HTMLElement | null>(null)
-let pieChart: echarts.ECharts | null = null
-let lineChart: echarts.ECharts | null = null
+// 统计汇总
+const summary = computed(() => {
+  const totalRefundCount = dataSource.value.reduce((sum, item) => sum + item.refundCount, 0);
+  const totalRefundAmount = dataSource.value.reduce((sum, item) => sum + item.refundAmount, 0);
+  const avgRefundAmount = totalRefundCount > 0 ? totalRefundAmount / totalRefundCount : 0;
 
-// 表格列
-// 表格列
-const columns = [
-  { title: '退费单号', dataIndex: 'id', key: 'id', width: 140 },
-  { title: '学生姓名', dataIndex: 'studentName', key: 'studentName', width: 120 },
-  { title: '班级', dataIndex: 'className', key: 'className', width: 150 },
-  { title: '原缴费金额', dataIndex: 'originalAmount', key: 'originalAmount', width: 120 },
-  { title: '退费金额', dataIndex: 'refundAmount', key: 'refundAmount', width: 120 },
-  { title: '退费原因', dataIndex: 'reason', key: 'reason', width: 100 },
-  { title: '状态', dataIndex: 'status', key: 'status', width: 100 },
-  { title: '申请时间', dataIndex: 'applyTime', key: 'applyTime', width: 160 },
-  { title: '操作人', dataIndex: 'operator', key: 'operator', width: 100 },
-  { title: '操作', key: 'action', width: 150, fixed: 'right' as const }
-]
+  return {
+    totalRefundCount,
+    totalRefundAmount,
+    avgRefundAmount,
+  };
+});
 
-// Mock 退费数据
-const refundData = ref<RefundRecord[]>([
-  { id: 'REF20240115001', studentName: '张小明', studentId: 'S001', className: '高三数学冲刺班A', originalAmount: 12800, refundAmount: 8500, reason: '个人原因', status: 'completed', applyTime: '2024-01-15 10:30:00', approveTime: '2024-01-15 14:00:00', completeTime: '2024-01-16 10:00:00', operator: '财务李', remark: '已完成退款' },
-  { id: 'REF20240114001', studentName: '李小红', studentId: 'S002', className: '初二英语提高班', originalAmount: 8600, refundAmount: 8600, reason: '时间冲突', status: 'approved', applyTime: '2024-01-14 09:20:00', approveTime: '2024-01-14 15:30:00', completeTime: '', operator: '财务王', remark: '待退款' },
-  { id: 'REF20240113001', studentName: '王小刚', studentId: 'S003', className: '小学奥数基础班', originalAmount: 6800, refundAmount: 5000, reason: '教学质量', status: 'pending', applyTime: '2024-01-13 16:45:00', approveTime: '', completeTime: '', operator: '', remark: '待审核' },
-  { id: 'REF20240112001', studentName: '赵小美', studentId: 'S004', className: '高一物理VIP班', originalAmount: 18000, refundAmount: 12000, reason: '转班', status: 'pending', applyTime: '2024-01-12 11:00:00', approveTime: '', completeTime: '', operator: '', remark: '待审核' },
-  { id: 'REF20240111001', studentName: '孙小强', studentId: 'S005', className: '高三数学冲刺班A', originalAmount: 12800, refundAmount: 6400, reason: '个人原因', status: 'rejected', applyTime: '2024-01-11 14:30:00', approveTime: '2024-01-11 17:00:00', completeTime: '', operator: '财务李', remark: '不符合退费条件' },
-  { id: 'REF20240110001', studentName: '周小燕', studentId: 'S006', className: '初二英语提高班', originalAmount: 8600, refundAmount: 4300, reason: '其他', status: 'completed', applyTime: '2024-01-10 09:00:00', approveTime: '2024-01-10 11:00:00', completeTime: '2024-01-11 09:00:00', operator: '财务王', remark: '已完成退款' },
-  { id: 'REF20240109001', studentName: '吴小龙', studentId: 'S007', className: '小学奥数基础班', originalAmount: 6800, refundAmount: 6800, reason: '时间冲突', status: 'pending', applyTime: '2024-01-09 15:20:00', approveTime: '', completeTime: '', operator: '', remark: '待审核' }
-])
+// ============================================================
+// 表格配置
+// ============================================================
 
-// 筛选后的数据
-const filteredData = computed(() => {
-  return refundData.value.filter(item => {
-    const matchStatus = !statusFilter.value || item.status === statusFilter.value
-    const matchSearch = !searchText.value || item.studentName.includes(searchText.value)
-    return matchStatus && matchSearch
-  })
-})
+const columns: TableProps['columns'] = [
+  {
+    title: '退费日期',
+    dataIndex: 'refundDate',
+    key: 'refundDate',
+    width: 120,
+    fixed: 'left',
+  },
+  {
+    title: '班级',
+    dataIndex: 'className',
+    key: 'className',
+    width: 150,
+  },
+  {
+    title: '班主任',
+    dataIndex: 'teacherName',
+    key: 'teacherName',
+    width: 100,
+  },
+  {
+    title: '校区',
+    dataIndex: 'campusName',
+    key: 'campusName',
+    width: 120,
+  },
+  {
+    title: '课型',
+    dataIndex: 'courseType',
+    key: 'courseType',
+    width: 80,
+  },
+  {
+    title: '退费人数',
+    dataIndex: 'refundCount',
+    key: 'refundCount',
+    width: 100,
+    align: 'right',
+  },
+  {
+    title: '退费金额',
+    dataIndex: 'refundAmount',
+    key: 'refundAmount',
+    width: 120,
+    align: 'right',
+  },
+  {
+    title: '退费原因',
+    dataIndex: 'refundReason',
+    key: 'refundReason',
+    width: 200,
+    ellipsis: true,
+  },
+  {
+    title: '风险等级',
+    key: 'risk',
+    width: 100,
+    align: 'center',
+  },
+];
 
-// 弹窗相关
-const modalVisible = ref(false)
-const refundForm = reactive({
-  studentId: undefined as string | undefined,
-  type: 'partial',
-  originalAmount: 12800,
-  refundAmount: 0,
-  reason: undefined as string | undefined,
-  description: ''
-})
+// ============================================================
+// 业务逻辑
+// ============================================================
 
-// 学生选项
-const studentOptions = [
-  { id: 'S001', name: '张小明', class: '高三数学冲刺班A' },
-  { id: 'S002', name: '李小红', class: '初二英语提高班' },
-  { id: 'S003', name: '王小刚', class: '小学奥数基础班' },
-  { id: 'S004', name: '赵小美', class: '高一物理VIP班' }
-]
+function buildQueryParams(): RefundDetailsQueryParams {
+  const [start, end] = filters.range ?? [
+    dayjs().startOf('month'),
+    dayjs().endOf('month'),
+  ];
 
-// 状态相关
-const getStatusColor = (status: string) => {
-  const map: Record<string, string> = {
-    pending: 'orange',
-    approved: 'blue',
-    rejected: 'red',
-    completed: 'green'
+  return {
+    startDate: start.format('YYYY-MM-DD'),
+    endDate: end.format('YYYY-MM-DD'),
+    campusId: filters.campusId,
+    courseType: filters.courseType,
+    classId: filters.classId,
+    teacherId: filters.teacherId,
+    page: pagination.current,
+    pageSize: pagination.pageSize,
+  };
+}
+
+async function fetchData() {
+  loading.value = true;
+  try {
+    const params = buildQueryParams();
+    const response = await getRefundDetails(params);
+
+    dataSource.value = response.data.items;
+    pagination.total = response.data.total;
+    pagination.current = response.data.page;
+    pagination.pageSize = response.data.pageSize;
+  } catch (error: any) {
+    message.error(error?.message || '获取数据失败');
+    console.error('获取退费明细失败:', error);
+  } finally {
+    loading.value = false;
   }
-  return map[status] || 'default'
 }
 
-const getStatusText = (status: string) => {
-  const map: Record<string, string> = {
-    pending: '待审核',
-    approved: '已批准',
-    rejected: '已拒绝',
-    completed: '已完成'
+async function fetchMeta() {
+  try {
+    const metaData = await getMeta();
+    meta.campuses = metaData.campuses;
+    meta.courseTypes = metaData.courseTypes;
+  } catch (error: any) {
+    console.error('获取元数据失败:', error);
   }
-  return map[status] || status
 }
 
-// 筛选选项
-const filterOption = (input: string, option: any) => {
-  return option.children[0].children.toLowerCase().indexOf(input.toLowerCase()) >= 0
+function handleSearch() {
+  pagination.current = 1;
+  fetchData();
 }
 
-// 初始化饼图
-const initPieChart = () => {
-  if (!pieChartRef.value) return
-
-  pieChart = echarts.init(pieChartRef.value)
-  const option: echarts.EChartsOption = {
-    tooltip: {
-      trigger: 'item',
-      formatter: '{b}: {c}笔 ({d}%)'
-    },
-    legend: {
-      orient: 'vertical',
-      right: 10,
-      top: 'center'
-    },
-    series: [
-      {
-        name: '退费原因',
-        type: 'pie',
-        radius: ['40%', '70%'],
-        avoidLabelOverlap: false,
-        itemStyle: {
-          borderRadius: 10,
-          borderColor: '#fff',
-          borderWidth: 2
-        },
-        label: {
-          show: false
-        },
-        emphasis: {
-          label: {
-            show: true,
-            fontSize: 14,
-            fontWeight: 'bold'
-          }
-        },
-        data: [
-          { value: 5, name: '个人原因', itemStyle: { color: '#1890ff' } },
-          { value: 3, name: '时间冲突', itemStyle: { color: '#52c41a' } },
-          { value: 2, name: '教学质量', itemStyle: { color: '#ff4d4f' } },
-          { value: 1, name: '转班', itemStyle: { color: '#722ed1' } },
-          { value: 1, name: '其他', itemStyle: { color: '#faad14' } }
-        ]
-      }
-    ]
-  }
-  pieChart.setOption(option)
+function handleReset() {
+  filters.range = [dayjs().startOf('month'), dayjs().endOf('month')];
+  filters.campusId = undefined;
+  filters.courseType = undefined;
+  filters.classId = undefined;
+  filters.teacherId = undefined;
+  pagination.current = 1;
+  fetchData();
 }
 
-// 初始化折线图
-const initLineChart = () => {
-  if (!lineChartRef.value) return
-
-  lineChart = echarts.init(lineChartRef.value)
-  const option: echarts.EChartsOption = {
-    tooltip: {
-      trigger: 'axis'
-    },
-    legend: {
-      data: ['退费金额', '退费笔数']
-    },
-    grid: {
-      left: '3%',
-      right: '4%',
-      bottom: '3%',
-      containLabel: true
-    },
-    xAxis: {
-      type: 'category',
-      boundaryGap: false,
-      data: ['8月', '9月', '10月', '11月', '12月', '1月']
-    },
-    yAxis: [
-      {
-        type: 'value',
-        name: '金额(元)',
-        position: 'left',
-        axisLabel: {
-          formatter: (value: number) => (value / 1000) + 'k'
-        }
-      },
-      {
-        type: 'value',
-        name: '笔数',
-        position: 'right'
-      }
-    ],
-    series: [
-      {
-        name: '退费金额',
-        type: 'line',
-        smooth: true,
-        data: [28000, 35000, 42000, 38000, 52000, 45680],
-        itemStyle: { color: '#ff4d4f' },
-        areaStyle: { color: 'rgba(255, 77, 79, 0.1)' }
-      },
-      {
-        name: '退费笔数',
-        type: 'bar',
-        yAxisIndex: 1,
-        data: [8, 10, 12, 9, 15, 12],
-        itemStyle: { color: '#1890ff' }
-      }
-    ]
-  }
-  lineChart.setOption(option)
+function handleTableChange(pag: TablePaginationConfig) {
+  pagination.current = pag.current ?? 1;
+  pagination.pageSize = pag.pageSize ?? 20;
+  fetchData();
 }
 
-// 事件处理
-const showAddModal = () => {
-  Object.assign(refundForm, {
-    studentId: undefined,
-    type: 'partial',
-    originalAmount: 12800,
-    refundAmount: 0,
-    reason: undefined,
-    description: ''
-  })
-  modalVisible.value = true
+function handleExport() {
+  // 简单导出为 CSV
+  const headers = ['退费日期', '班级', '班主任', '校区', '课型', '退费人数', '退费金额', '退费原因'];
+  const rows = dataSource.value.map(item => [
+    formatDate(item.refundDate),
+    item.className,
+    item.teacherName,
+    item.campusName || '-',
+    item.courseType || '-',
+    item.refundCount,
+    item.refundAmount,
+    item.refundReason ? `"${item.refundReason.replace(/"/g, '""')}"` : '-',
+  ]);
+
+  const csvContent = [
+    headers.join(','),
+    ...rows.map(row => row.join(',')),
+  ].join('\n');
+
+  const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = `退费明细_${dayjs().format('YYYYMMDDHHmmss')}.csv`;
+  link.click();
+
+  message.success('导出成功');
 }
 
-const handleModalOk = () => {
-  if (!refundForm.studentId || !refundForm.reason || refundForm.refundAmount <= 0) {
-    message.error('请填写完整信息')
-    return
-  }
-  message.success('退费申请已提交')
-  modalVisible.value = false
+// ============================================================
+// 工具函数
+// ============================================================
+
+function formatDate(dateStr: string): string {
+  return dayjs(dateStr).format('YYYY-MM-DD');
 }
 
-const handleModalCancel = () => {
-  modalVisible.value = false
+function formatNumber(num: number): string {
+  return num.toFixed(2);
 }
 
-const viewDetail = (record: RefundRecord) => {
-  message.info(`查看退费详情: ${record.id}`)
+function truncateText(text: string, maxLength: number): string {
+  if (text.length <= maxLength) return text;
+  return text.substring(0, maxLength) + '...';
 }
 
-const approveRefund = (record: RefundRecord) => {
-  message.info(`审核退费申请: ${record.id}`)
-}
-
-const processRefund = (record: RefundRecord) => {
-  message.success(`处理退款: ${record.id}`)
-}
-
-// 窗口 resize 处理
-const handleResize = () => {
-  pieChart?.resize()
-  lineChart?.resize()
-}
+// ============================================================
+// 生命周期
+// ============================================================
 
 onMounted(() => {
-  initPieChart()
-  initLineChart()
-  window.addEventListener('resize', handleResize)
-})
-
-onUnmounted(() => {
-  window.removeEventListener('resize', handleResize)
-  pieChart?.dispose()
-  lineChart?.dispose()
-})
+  fetchMeta();
+  fetchData();
+});
 </script>
 
-<style scoped lang="less">
-.refund-details {
-  padding: 24px;
-  background: #f0f2f5;
-  min-height: 100%;
+<style scoped>
+.refund-details-page {
+  padding: 16px;
 }
 
-.page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 24px;
-  flex-wrap: wrap;
-  gap: 16px;
-
-  h2 {
-    margin: 0;
-    font-size: 20px;
-    font-weight: 600;
-  }
+.filter-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: rgba(0, 0, 0, 0.85);
 }
 
-.stats-section {
-  margin-bottom: 16px;
+.filter-subtitle {
+  font-size: 13px;
+  color: rgba(0, 0, 0, 0.45);
+  margin-top: 4px;
 }
 
-.chart-section {
-  margin-bottom: 16px;
+.filter-label {
+  font-weight: 500;
+  margin-bottom: 8px;
+  color: rgba(0, 0, 0, 0.65);
+}
 
-  .chart-container {
-    height: 280px;
-  }
+:deep(.ant-statistic-title) {
+  font-size: 14px;
+  color: rgba(0, 0, 0, 0.45);
+}
+
+:deep(.ant-statistic-content) {
+  font-size: 20px;
 }
 </style>

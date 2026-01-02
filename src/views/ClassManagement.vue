@@ -1,349 +1,742 @@
 <template>
   <div class="class-management">
+    <!-- 页面标题 -->
     <div class="page-header">
-      <h2>班级管理</h2>
-      <a-space>
-        <a-input-search
-          v-model:value="searchText"
-          placeholder="搜索班级名称"
-          style="width: 200px"
-          @search="handleSearch"
-        />
-        <a-select
-          v-model:value="statusFilter"
-          placeholder="班级状态"
-          style="width: 120px"
-          allowClear
-        >
-          <a-select-option value="active">进行中</a-select-option>
-          <a-select-option value="pending">待开班</a-select-option>
-          <a-select-option value="finished">已结课</a-select-option>
-        </a-select>
-        <a-button type="primary" @click="showAddModal">
-          <template #icon><PlusOutlined /></template>
-          新增班级
-        </a-button>
-      </a-space>
+      <h1 class="page-title">班级经营看板</h1>
+      <p class="page-subtitle">查看各班级的缴费、退费及人数统计</p>
     </div>
 
-    <!-- 统计卡片 -->
-    <a-row :gutter="[16, 16]" class="stats-section">
-      <a-col :xs="12" :sm="6">
-        <a-card>
-          <a-statistic title="班级总数" :value="statistics.total" suffix="个" />
+    <!-- 筛选区域 -->
+    <a-card class="filter-card" :bordered="false">
+      <a-row :gutter="16" align="middle">
+        <a-col :xs="24" :sm="12" :md="8" :lg="6">
+          <div class="filter-label">时间范围</div>
+          <a-range-picker
+            v-model:value="filters.dateRange"
+            :placeholder="['开始日期', '结束日期']"
+            style="width: 100%"
+            :allow-clear="false"
+          />
+        </a-col>
+        <a-col :xs="24" :sm="12" :md="8" :lg="6">
+          <div class="filter-label">校区</div>
+          <a-select
+            v-model:value="filters.campusId"
+            placeholder="全部校区"
+            allow-clear
+            style="width: 100%"
+          >
+            <a-select-option v-for="campus in meta.campuses" :key="campus.id" :value="campus.id">
+              {{ campus.name }}
+            </a-select-option>
+          </a-select>
+        </a-col>
+        <a-col :xs="24" :sm="12" :md="8" :lg="6">
+          <div class="filter-label">课型</div>
+          <a-select
+            v-model:value="filters.courseType"
+            placeholder="全部课型"
+            allow-clear
+            style="width: 100%"
+          >
+            <a-select-option v-for="type in meta.courseTypes" :key="type" :value="type">
+              {{ type }}
+            </a-select-option>
+          </a-select>
+        </a-col>
+        <a-col :xs="24" :sm="12" :md="8" :lg="6">
+          <div class="filter-label">&nbsp;</div>
+          <a-space>
+            <a-button type="primary" :loading="loading" @click="handleSearch">
+              <template #icon><SearchOutlined /></template>
+              查询
+            </a-button>
+            <a-button @click="handleReset">
+              <template #icon><ReloadOutlined /></template>
+              重置
+            </a-button>
+          </a-space>
+        </a-col>
+      </a-row>
+    </a-card>
+
+    <!-- 汇总 KPI 卡片 -->
+    <a-row :gutter="16" class="kpi-row">
+      <a-col :xs="12" :sm="8" :md="4">
+        <a-card class="kpi-card" :bordered="false" :loading="loading">
+          <a-statistic
+            title="班级数量"
+            :value="summaryStats.classCount"
+            :value-style="{ color: 'var(--primary-color)' }"
+          >
+            <template #suffix>个</template>
+          </a-statistic>
         </a-card>
       </a-col>
-      <a-col :xs="12" :sm="6">
-        <a-card>
-          <a-statistic title="进行中" :value="statistics.active" suffix="个" :value-style="{ color: '#52c41a' }" />
+      <a-col :xs="12" :sm="8" :md="4">
+        <a-card class="kpi-card" :bordered="false" :loading="loading">
+          <a-statistic
+            title="总缴费人数"
+            :value="summaryStats.totalPayCount"
+            :value-style="{ color: 'var(--success-color)' }"
+          >
+            <template #suffix>人</template>
+          </a-statistic>
         </a-card>
       </a-col>
-      <a-col :xs="12" :sm="6">
-        <a-card>
-          <a-statistic title="学生总数" :value="statistics.students" suffix="人" :value-style="{ color: '#1890ff' }" />
+      <a-col :xs="12" :sm="8" :md="4">
+        <a-card class="kpi-card" :bordered="false" :loading="loading">
+          <a-statistic
+            title="总退费人数"
+            :value="summaryStats.totalRefundCount"
+            :value-style="{ color: 'var(--warning-color)' }"
+          >
+            <template #suffix>人</template>
+          </a-statistic>
         </a-card>
       </a-col>
-      <a-col :xs="12" :sm="6">
-        <a-card>
-          <a-statistic title="本月收入" :value="statistics.revenue" prefix="¥" :value-style="{ color: '#722ed1' }" />
+      <a-col :xs="12" :sm="8" :md="4">
+        <a-card class="kpi-card" :bordered="false" :loading="loading">
+          <a-statistic
+            title="总缴费额"
+            :value="summaryStats.totalPayAmount"
+            :precision="2"
+            :value-style="{ color: 'var(--success-color)' }"
+          >
+            <template #prefix>¥</template>
+          </a-statistic>
+        </a-card>
+      </a-col>
+      <a-col :xs="12" :sm="8" :md="4">
+        <a-card class="kpi-card" :bordered="false" :loading="loading">
+          <a-statistic
+            title="总退费额"
+            :value="summaryStats.totalRefundAmount"
+            :precision="2"
+            :value-style="{ color: 'var(--warning-color)' }"
+          >
+            <template #prefix>¥</template>
+          </a-statistic>
+        </a-card>
+      </a-col>
+      <a-col :xs="12" :sm="8" :md="4">
+        <a-card class="kpi-card" :bordered="false" :loading="loading">
+          <a-statistic
+            title="总净收入"
+            :value="summaryStats.totalNetAmount"
+            :precision="2"
+            :value-style="{ color: summaryStats.totalNetAmount >= 0 ? 'var(--primary-color)' : 'var(--danger-color)' }"
+          >
+            <template #prefix>¥</template>
+          </a-statistic>
         </a-card>
       </a-col>
     </a-row>
 
-    <!-- 班级列表 -->
-    <a-card title="班级列表" :bordered="false">
+    <!-- 班级对比条形图 -->
+    <a-card class="chart-card" :bordered="false" :loading="loading">
+      <template #title>
+        <div class="card-title-wrapper">
+          <span class="card-title">班级对比</span>
+          <a-radio-group v-model:value="chartMetric" size="small" button-style="solid">
+            <a-radio-button value="amount">金额</a-radio-button>
+            <a-radio-button value="count">人数</a-radio-button>
+          </a-radio-group>
+        </div>
+      </template>
+      <div ref="barChartRef" class="bar-chart-container"></div>
+    </a-card>
+
+    <!-- 班级明细表格 -->
+    <a-card class="table-card" :bordered="false">
+      <template #title>
+        <span class="card-title">班级经营明细</span>
+      </template>
+      <template #extra>
+        <a-button type="link" @click="handleExport">
+          <template #icon><DownloadOutlined /></template>
+          导出
+        </a-button>
+      </template>
       <a-table
-        :columns="columns"
-        :data-source="filteredData"
-        :pagination="pagination"
+        :columns="tableColumns"
+        :data-source="classData"
         :loading="loading"
-        row-key="id"
+        :pagination="tablePagination"
+        :scroll="{ x: 1000 }"
+        row-key="classId"
+        size="middle"
         @change="handleTableChange"
       >
+        <!-- 班级名称 -->
         <template #bodyCell="{ column, record }">
-          <template v-if="column.key === 'name'">
-            <a @click="viewDetail(record)">{{ record.name }}</a>
+          <template v-if="column.dataIndex === 'classDisplay'">
+            <span class="class-name">{{ record.classDisplay }}</span>
           </template>
-          <template v-if="column.key === 'teacher'">
-            <a-avatar size="small" :style="{ backgroundColor: '#1890ff', marginRight: '8px' }">
-              {{ record.teacher.charAt(0) }}
-            </a-avatar>
-            {{ record.teacher }}
+
+          <!-- 缴费金额 -->
+          <template v-else-if="column.dataIndex === 'payAmount'">
+            <span class="amount-positive">¥{{ formatNumber(record.payAmount) }}</span>
           </template>
-          <template v-if="column.key === 'status'">
-            <a-tag :color="getStatusColor(record.status)">
-              {{ getStatusText(record.status) }}
+
+          <!-- 退费金额 -->
+          <template v-else-if="column.dataIndex === 'refundAmount'">
+            <span class="amount-negative">¥{{ formatNumber(record.refundAmount) }}</span>
+          </template>
+
+          <!-- 净收入 -->
+          <template v-else-if="column.dataIndex === 'netAmount'">
+            <span :class="record.netAmount >= 0 ? 'amount-positive' : 'amount-negative'">
+              ¥{{ formatNumber(record.netAmount) }}
+            </span>
+          </template>
+
+          <!-- 缴费人数 -->
+          <template v-else-if="column.dataIndex === 'payCount'">
+            <a-tag color="green">{{ record.payCount }}人</a-tag>
+          </template>
+
+          <!-- 退费人数 -->
+          <template v-else-if="column.dataIndex === 'refundCount'">
+            <a-tag :color="record.refundCount > 0 ? 'orange' : 'default'">
+              {{ record.refundCount }}人
             </a-tag>
           </template>
-          <template v-if="column.key === 'progress'">
+
+          <!-- 留存人数 -->
+          <template v-else-if="column.dataIndex === 'retentionCount'">
+            <span>{{ record.payCount - record.refundCount }}人</span>
+          </template>
+
+          <!-- 留存率 -->
+          <template v-else-if="column.dataIndex === 'retentionRate'">
             <a-progress
-              :percent="record.progress"
-              :status="record.progress === 100 ? 'success' : 'active'"
-              size="small"
+              :percent="calcRetentionRate(record)"
+              :size="'small'"
+              :stroke-color="getRetentionColor(calcRetentionRate(record))"
+              :format="(percent: number) => `${percent.toFixed(1)}%`"
               style="width: 100px"
             />
-          </template>
-          <template v-if="column.key === 'revenue'">
-            <span style="color: #52c41a">¥{{ record.revenue.toLocaleString() }}</span>
-          </template>
-          <template v-if="column.key === 'action'">
-            <a-space>
-              <a-button type="link" size="small" @click="viewDetail(record)">详情</a-button>
-              <a-button type="link" size="small" @click="editClass(record)">编辑</a-button>
-              <a-popconfirm
-                title="确定要删除该班级吗？"
-                @confirm="deleteClass(record)"
-              >
-                <a-button type="link" size="small" danger>删除</a-button>
-              </a-popconfirm>
-            </a-space>
           </template>
         </template>
       </a-table>
     </a-card>
-
-    <!-- 新增/编辑弹窗 -->
-    <a-modal
-      v-model:open="modalVisible"
-      :title="modalTitle"
-      @ok="handleModalOk"
-      @cancel="handleModalCancel"
-    >
-      <a-form
-        :model="formState"
-        :label-col="{ span: 6 }"
-        :wrapper-col="{ span: 16 }"
-      >
-        <a-form-item label="班级名称" required>
-          <a-input v-model:value="formState.name" placeholder="请输入班级名称" />
-        </a-form-item>
-        <a-form-item label="授课老师" required>
-          <a-select v-model:value="formState.teacher" placeholder="请选择授课老师">
-            <a-select-option value="张老师">张老师</a-select-option>
-            <a-select-option value="李老师">李老师</a-select-option>
-            <a-select-option value="王老师">王老师</a-select-option>
-            <a-select-option value="赵老师">赵老师</a-select-option>
-          </a-select>
-        </a-form-item>
-        <a-form-item label="班级类型">
-          <a-select v-model:value="formState.type" placeholder="请选择班级类型">
-            <a-select-option value="regular">常规班</a-select-option>
-            <a-select-option value="intensive">强化班</a-select-option>
-            <a-select-option value="vip">VIP班</a-select-option>
-          </a-select>
-        </a-form-item>
-        <a-form-item label="开班日期">
-          <a-date-picker v-model:value="formState.startDate" style="width: 100%" />
-        </a-form-item>
-        <a-form-item label="班级人数">
-          <a-input-number v-model:value="formState.capacity" :min="1" :max="100" style="width: 100%" />
-        </a-form-item>
-      </a-form>
-    </a-modal>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, reactive } from 'vue'
-import { message } from 'ant-design-vue'
-import { PlusOutlined } from '@ant-design/icons-vue'
-import type { TablePaginationConfig } from 'ant-design-vue'
-import type { Dayjs } from 'dayjs'
+import { ref, reactive, computed, onMounted, onBeforeUnmount, watch } from 'vue';
+import { message } from 'ant-design-vue';
+import { SearchOutlined, ReloadOutlined, DownloadOutlined } from '@ant-design/icons-vue';
+import dayjs, { Dayjs } from 'dayjs';
+import * as echarts from 'echarts';
+import { getClassRank, type ClassRankItem, type DashboardQueryParams } from '@/api/dashboard';
+import { getMeta, type Campus } from '@/api/meta';
 
-interface ClassItem {
-  id: number
-  name: string
-  teacher: string
-  type: string
-  students: number
-  capacity: number
-  status: string
-  progress: number
-  revenue: number
-  startDate: string
-  endDate: string
+// ============================================================
+// 类型定义
+// ============================================================
+
+interface FilterState {
+  dateRange: [Dayjs, Dayjs];
+  campusId: string | undefined;
+  courseType: string | undefined;
 }
 
-interface FormState {
-  name: string
-  teacher: string
-  type: string
-  startDate: Dayjs | null
-  capacity: number
+interface MetaState {
+  campuses: Campus[];
+  courseTypes: string[];
 }
 
-// 搜索和筛选
-const searchText = ref('')
-const statusFilter = ref<string | undefined>(undefined)
-const loading = ref(false)
+interface SummaryStats {
+  classCount: number;
+  totalPayCount: number;
+  totalRefundCount: number;
+  totalPayAmount: number;
+  totalRefundAmount: number;
+  totalNetAmount: number;
+}
 
-// 统计数据
-const statistics = reactive({
-  total: 24,
-  active: 18,
-  students: 486,
-  revenue: 628500
-})
+// ============================================================
+// 响应式状态
+// ============================================================
 
-// 分页配置
-const pagination = reactive<TablePaginationConfig>({
+const loading = ref(false);
+const chartMetric = ref<'amount' | 'count'>('amount');
+
+// 筛选条件
+const filters = reactive<FilterState>({
+  dateRange: [dayjs().startOf('month'), dayjs().endOf('month')],
+  campusId: undefined,
+  courseType: undefined,
+});
+
+// 元数据
+const meta = reactive<MetaState>({
+  campuses: [],
+  courseTypes: [],
+});
+
+// 班级数据
+const classData = ref<ClassRankItem[]>([]);
+
+// 汇总统计
+const summaryStats = computed<SummaryStats>(() => {
+  const data = classData.value;
+  return {
+    classCount: data.length,
+    totalPayCount: data.reduce((sum, item) => sum + item.payCount, 0),
+    totalRefundCount: data.reduce((sum, item) => sum + item.refundCount, 0),
+    totalPayAmount: data.reduce((sum, item) => sum + item.payAmount, 0),
+    totalRefundAmount: data.reduce((sum, item) => sum + item.refundAmount, 0),
+    totalNetAmount: data.reduce((sum, item) => sum + item.netAmount, 0),
+  };
+});
+
+// 表格分页
+const tablePagination = reactive({
   current: 1,
   pageSize: 10,
-  total: 24,
+  total: 0,
   showSizeChanger: true,
   showQuickJumper: true,
-  showTotal: (total: number) => `共 ${total} 条记录`
-})
+  showTotal: (total: number) => `共 ${total} 个班级`,
+  pageSizeOptions: ['10', '20', '50', '100'],
+});
 
 // 表格列定义
-const columns = [
-  { title: '班级名称', dataIndex: 'name', key: 'name' },
-  { title: '授课老师', dataIndex: 'teacher', key: 'teacher' },
-  { title: '班级类型', dataIndex: 'type', key: 'type' },
-  { title: '学生人数', dataIndex: 'students', key: 'students' },
-  { title: '状态', dataIndex: 'status', key: 'status' },
-  { title: '进度', dataIndex: 'progress', key: 'progress' },
-  { title: '收入', dataIndex: 'revenue', key: 'revenue' },
-  { title: '操作', key: 'action', width: 180 }
-]
+const tableColumns = [
+  {
+    title: '班级',
+    dataIndex: 'classDisplay',
+    key: 'classDisplay',
+    width: 200,
+    fixed: 'left' as const,
+  },
+  {
+    title: '班主任',
+    dataIndex: 'teacherName',
+    key: 'teacherName',
+    width: 100,
+  },
+  {
+    title: '缴费人数',
+    dataIndex: 'payCount',
+    key: 'payCount',
+    width: 100,
+    sorter: (a: ClassRankItem, b: ClassRankItem) => a.payCount - b.payCount,
+  },
+  {
+    title: '退费人数',
+    dataIndex: 'refundCount',
+    key: 'refundCount',
+    width: 100,
+    sorter: (a: ClassRankItem, b: ClassRankItem) => a.refundCount - b.refundCount,
+  },
+  {
+    title: '留存人数',
+    dataIndex: 'retentionCount',
+    key: 'retentionCount',
+    width: 100,
+  },
+  {
+    title: '留存率',
+    dataIndex: 'retentionRate',
+    key: 'retentionRate',
+    width: 140,
+    sorter: (a: ClassRankItem, b: ClassRankItem) => calcRetentionRate(a) - calcRetentionRate(b),
+  },
+  {
+    title: '缴费金额',
+    dataIndex: 'payAmount',
+    key: 'payAmount',
+    width: 120,
+    sorter: (a: ClassRankItem, b: ClassRankItem) => a.payAmount - b.payAmount,
+  },
+  {
+    title: '退费金额',
+    dataIndex: 'refundAmount',
+    key: 'refundAmount',
+    width: 120,
+    sorter: (a: ClassRankItem, b: ClassRankItem) => a.refundAmount - b.refundAmount,
+  },
+  {
+    title: '净收入',
+    dataIndex: 'netAmount',
+    key: 'netAmount',
+    width: 120,
+    sorter: (a: ClassRankItem, b: ClassRankItem) => a.netAmount - b.netAmount,
+    defaultSortOrder: 'descend' as const,
+  },
+];
 
-// Mock 班级数据
-const classData = ref<ClassItem[]>([
-  { id: 1, name: '高三数学冲刺班A', teacher: '张老师', type: '强化班', students: 25, capacity: 30, status: 'active', progress: 65, revenue: 80000, startDate: '2024-01-01', endDate: '2024-06-30' },
-  { id: 2, name: '初二英语提高班', teacher: '李老师', type: '常规班', students: 20, capacity: 25, status: 'active', progress: 45, revenue: 48000, startDate: '2024-02-15', endDate: '2024-07-15' },
-  { id: 3, name: '小学奥数基础班', teacher: '王老师', type: '常规班', students: 18, capacity: 20, status: 'active', progress: 80, revenue: 36000, startDate: '2023-09-01', endDate: '2024-01-31' },
-  { id: 4, name: '高一物理VIP班', teacher: '赵老师', type: 'VIP班', students: 8, capacity: 10, status: 'active', progress: 30, revenue: 64000, startDate: '2024-03-01', endDate: '2024-08-31' },
-  { id: 5, name: '中考语文冲刺班', teacher: '张老师', type: '强化班', students: 22, capacity: 25, status: 'pending', progress: 0, revenue: 0, startDate: '2024-04-01', endDate: '2024-06-15' },
-  { id: 6, name: '高二化学提高班', teacher: '李老师', type: '常规班', students: 15, capacity: 20, status: 'finished', progress: 100, revenue: 45000, startDate: '2023-07-01', endDate: '2023-12-31' }
-])
+// ============================================================
+// 图表相关
+// ============================================================
 
-// 筛选后的数据
-const filteredData = computed(() => {
-  return classData.value.filter(item => {
-    const matchSearch = !searchText.value || item.name.includes(searchText.value)
-    const matchStatus = !statusFilter.value || item.status === statusFilter.value
-    return matchSearch && matchStatus
-  })
-})
+const barChartRef = ref<HTMLDivElement | null>(null);
+let barChart: echarts.ECharts | null = null;
 
-// 弹窗相关
-const modalVisible = ref(false)
-const modalTitle = ref('新增班级')
-const editingId = ref<number | null>(null)
-const formState = reactive<FormState>({
-  name: '',
-  teacher: '',
-  type: 'regular',
-  startDate: null,
-  capacity: 20
-})
-
-// 状态颜色映射
-const getStatusColor = (status: string) => {
-  const map: Record<string, string> = {
-    active: 'green',
-    pending: 'orange',
-    finished: 'default'
+function initChart() {
+  if (barChartRef.value) {
+    barChart = echarts.init(barChartRef.value);
   }
-  return map[status] || 'default'
 }
 
-const getStatusText = (status: string) => {
-  const map: Record<string, string> = {
-    active: '进行中',
-    pending: '待开班',
-    finished: '已结课'
-  }
-  return map[status] || status
-}
+function renderChart() {
+  if (!barChart) return;
 
-// 事件处理
-const handleSearch = () => {
-  message.info(`搜索: ${searchText.value}`)
-}
+  // 取 Top 15 班级用于展示
+  const topData = [...classData.value]
+    .sort((a, b) => b.netAmount - a.netAmount)
+    .slice(0, 15);
 
-const handleTableChange = (pag: TablePaginationConfig) => {
-  pagination.current = pag.current
-  pagination.pageSize = pag.pageSize
-}
+  const classNames = topData.map((item) => item.classDisplay);
 
-const showAddModal = () => {
-  modalTitle.value = '新增班级'
-  editingId.value = null
-  Object.assign(formState, {
-    name: '',
-    teacher: '',
-    type: 'regular',
-    startDate: null,
-    capacity: 20
-  })
-  modalVisible.value = true
-}
+  let series: echarts.BarSeriesOption[];
 
-const viewDetail = (record: ClassItem) => {
-  message.info(`查看班级详情: ${record.name}`)
-}
-
-const editClass = (record: ClassItem) => {
-  modalTitle.value = '编辑班级'
-  editingId.value = record.id
-  Object.assign(formState, {
-    name: record.name,
-    teacher: record.teacher,
-    type: record.type,
-    startDate: null,
-    capacity: record.capacity
-  })
-  modalVisible.value = true
-}
-
-const deleteClass = (record: ClassItem) => {
-  classData.value = classData.value.filter(item => item.id !== record.id)
-  message.success(`已删除班级: ${record.name}`)
-}
-
-const handleModalOk = () => {
-  if (!formState.name || !formState.teacher) {
-    message.error('请填写必填项')
-    return
-  }
-
-  if (editingId.value) {
-    message.success('班级信息已更新')
+  if (chartMetric.value === 'amount') {
+    series = [
+      {
+        name: '缴费金额',
+        type: 'bar',
+        data: topData.map((item) => item.payAmount),
+        itemStyle: { color: '#52c41a' },
+      },
+      {
+        name: '退费金额',
+        type: 'bar',
+        data: topData.map((item) => item.refundAmount),
+        itemStyle: { color: '#faad14' },
+      },
+      {
+        name: '净收入',
+        type: 'bar',
+        data: topData.map((item) => item.netAmount),
+        itemStyle: {
+          color: (params) => {
+            const value = params.value as number;
+            return value >= 0 ? '#1890ff' : '#ff4d4f';
+          },
+        },
+      },
+    ];
   } else {
-    message.success('班级添加成功')
+    series = [
+      {
+        name: '缴费人数',
+        type: 'bar',
+        data: topData.map((item) => item.payCount),
+        itemStyle: { color: '#52c41a' },
+      },
+      {
+        name: '退费人数',
+        type: 'bar',
+        data: topData.map((item) => item.refundCount),
+        itemStyle: { color: '#faad14' },
+      },
+      {
+        name: '留存人数',
+        type: 'bar',
+        data: topData.map((item) => item.payCount - item.refundCount),
+        itemStyle: { color: '#1890ff' },
+      },
+    ];
   }
-  modalVisible.value = false
+
+  const option: echarts.EChartsOption = {
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: { type: 'shadow' },
+      formatter: (params) => {
+        if (!Array.isArray(params)) return '';
+        const title = params[0]?.axisValueLabel || '';
+        let content = `<div style="font-weight:600;margin-bottom:8px;">${title}</div>`;
+        params.forEach((p) => {
+          const value = p.value as number;
+          const formattedValue = chartMetric.value === 'amount'
+            ? `¥${formatNumber(value)}`
+            : `${value}人`;
+          content += `<div style="display:flex;justify-content:space-between;gap:16px;">
+            <span>${p.marker}${p.seriesName}</span>
+            <span style="font-weight:600;">${formattedValue}</span>
+          </div>`;
+        });
+        return content;
+      },
+    },
+    legend: {
+      top: 0,
+      left: 'center',
+    },
+    grid: {
+      left: '3%',
+      right: '4%',
+      bottom: '3%',
+      top: 40,
+      containLabel: true,
+    },
+    xAxis: {
+      type: 'category',
+      data: classNames,
+      axisLabel: {
+        rotate: 30,
+        interval: 0,
+        width: 80,
+        overflow: 'truncate',
+        ellipsis: '...',
+      },
+    },
+    yAxis: {
+      type: 'value',
+      axisLabel: {
+        formatter: (value: number) => {
+          if (chartMetric.value === 'amount') {
+            if (value >= 10000) {
+              return (value / 10000).toFixed(1) + '万';
+            }
+            return value.toString();
+          }
+          return value.toString();
+        },
+      },
+    },
+    series,
+  };
+
+  barChart.setOption(option, true);
 }
 
-const handleModalCancel = () => {
-  modalVisible.value = false
+function handleResize() {
+  barChart?.resize();
 }
+
+// ============================================================
+// 数据加载
+// ============================================================
+
+function buildQueryParams(): DashboardQueryParams {
+  const [start, end] = filters.dateRange;
+  return {
+    startDate: start.format('YYYY-MM-DD'),
+    endDate: end.format('YYYY-MM-DD'),
+    campusId: filters.campusId,
+    courseType: filters.courseType,
+  };
+}
+
+async function fetchMeta() {
+  try {
+    const data = await getMeta();
+    meta.campuses = data.campuses;
+    meta.courseTypes = data.courseTypes;
+  } catch (error) {
+    console.error('获取元数据失败:', error);
+    message.error('获取筛选选项失败');
+  }
+}
+
+async function fetchClassData() {
+  loading.value = true;
+  try {
+    const params = buildQueryParams();
+    const response = await getClassRank(params);
+    classData.value = response.data.items || [];
+    tablePagination.total = classData.value.length;
+    renderChart();
+  } catch (error) {
+    console.error('获取班级数据失败:', error);
+    message.error('获取班级数据失败，请稍后重试');
+  } finally {
+    loading.value = false;
+  }
+}
+
+async function loadData() {
+  await Promise.all([fetchMeta(), fetchClassData()]);
+}
+
+// ============================================================
+// 事件处理
+// ============================================================
+
+function handleSearch() {
+  tablePagination.current = 1;
+  fetchClassData();
+}
+
+function handleReset() {
+  filters.dateRange = [dayjs().startOf('month'), dayjs().endOf('month')];
+  filters.campusId = undefined;
+  filters.courseType = undefined;
+  tablePagination.current = 1;
+  fetchClassData();
+}
+
+function handleTableChange(pagination: typeof tablePagination) {
+  tablePagination.current = pagination.current;
+  tablePagination.pageSize = pagination.pageSize;
+}
+
+function handleExport() {
+  message.info('导出功能开发中...');
+}
+
+// ============================================================
+// 工具函数
+// ============================================================
+
+function formatNumber(value: number): string {
+  return value.toLocaleString('zh-CN', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
+function calcRetentionRate(record: ClassRankItem): number {
+  if (record.payCount === 0) return 0;
+  return ((record.payCount - record.refundCount) / record.payCount) * 100;
+}
+
+function getRetentionColor(rate: number): string {
+  if (rate >= 90) return '#52c41a';
+  if (rate >= 70) return '#1890ff';
+  if (rate >= 50) return '#faad14';
+  return '#ff4d4f';
+}
+
+// ============================================================
+// 监听与生命周期
+// ============================================================
+
+watch(chartMetric, () => {
+  renderChart();
+});
+
+onMounted(() => {
+  initChart();
+  loadData();
+  window.addEventListener('resize', handleResize);
+});
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', handleResize);
+  barChart?.dispose();
+});
 </script>
 
-<style scoped lang="less">
+<style scoped>
 .class-management {
   padding: 24px;
-  background: #f0f2f5;
+  background-color: var(--bg-color);
   min-height: 100%;
 }
 
 .page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
   margin-bottom: 24px;
-  flex-wrap: wrap;
-  gap: 16px;
-
-  h2 {
-    margin: 0;
-    font-size: 20px;
-    font-weight: 600;
-  }
 }
 
-.stats-section {
-  margin-bottom: 16px;
+.page-title {
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 8px 0;
+}
+
+.page-subtitle {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.filter-card {
+  margin-bottom: 24px;
+  border-radius: 8px;
+}
+
+.filter-label {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+
+.kpi-row {
+  margin-bottom: 24px;
+}
+
+.kpi-card {
+  border-radius: 8px;
+  height: 100%;
+}
+
+.kpi-card :deep(.ant-statistic-title) {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.kpi-card :deep(.ant-statistic-content) {
+  font-size: 20px;
+}
+
+.chart-card {
+  margin-bottom: 24px;
+  border-radius: 8px;
+}
+
+.card-title-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.card-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.bar-chart-container {
+  height: 400px;
+  width: 100%;
+}
+
+.table-card {
+  border-radius: 8px;
+}
+
+.class-name {
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.amount-positive {
+  color: var(--success-color);
+  font-weight: 500;
+}
+
+.amount-negative {
+  color: var(--warning-color);
+  font-weight: 500;
+}
+
+/* 响应式调整 */
+@media (max-width: 768px) {
+  .class-management {
+    padding: 16px;
+  }
+
+  .page-title {
+    font-size: 20px;
+  }
+
+  .kpi-card :deep(.ant-statistic-content) {
+    font-size: 16px;
+  }
+
+  .bar-chart-container {
+    height: 300px;
+  }
 }
 </style>

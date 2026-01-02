@@ -1,334 +1,546 @@
+<!-- src/views/TeacherPerformance.vue -->
 <template>
   <div class="teacher-performance">
+    <!-- 页面标题 -->
     <div class="page-header">
-      <h2>教师绩效</h2>
-      <a-space>
-        <a-select
-          v-model:value="selectedMonth"
-          style="width: 120px"
-        >
-          <a-select-option v-for="month in monthOptions" :key="month" :value="month">
-            {{ month }}
-          </a-select-option>
-        </a-select>
-        <a-button @click="handleExport">
-          <template #icon><ExportOutlined /></template>
-          导出报表
-        </a-button>
-      </a-space>
+      <h2 class="page-title">班主任绩效统计表</h2>
+      <p class="page-desc">查看班主任的招生业绩与退费情况</p>
     </div>
 
-    <!-- 绩效概览 -->
-    <a-row :gutter="[16, 16]" class="overview-section">
-      <a-col :xs="24" :sm="12" :lg="6">
-        <a-card>
-          <a-statistic title="教师总数" :value="28" suffix="人">
-            <template #prefix><TeamOutlined /></template>
+    <!-- 筛选区域 -->
+    <a-card :bordered="false" class="filter-card">
+      <a-row :gutter="16" align="middle">
+        <!-- 时间粒度切换 -->
+        <a-col :xs="24" :sm="8" :md="6">
+          <div class="filter-label">统计周期</div>
+          <a-radio-group v-model:value="periodType" button-style="solid" @change="handlePeriodChange">
+            <a-radio-button value="month">按月</a-radio-button>
+            <a-radio-button value="year">按年</a-radio-button>
+          </a-radio-group>
+        </a-col>
+
+        <!-- 月份选择器 -->
+        <a-col :xs="24" :sm="8" :md="6" v-if="periodType === 'month'">
+          <div class="filter-label">选择月份</div>
+          <a-date-picker
+            v-model:value="selectedMonth"
+            picker="month"
+            :allowClear="false"
+            style="width: 100%"
+            format="YYYY年MM月"
+            valueFormat="YYYY-MM"
+          />
+        </a-col>
+
+        <!-- 年份选择器 -->
+        <a-col :xs="24" :sm="8" :md="6" v-if="periodType === 'year'">
+          <div class="filter-label">选择年份</div>
+          <a-date-picker
+            v-model:value="selectedYear"
+            picker="year"
+            :allowClear="false"
+            style="width: 100%"
+            format="YYYY年"
+            valueFormat="YYYY"
+          />
+        </a-col>
+
+        <!-- 校区筛选 -->
+        <a-col :xs="24" :sm="8" :md="6">
+          <div class="filter-label">校区</div>
+          <a-select
+            v-model:value="campusId"
+            placeholder="全部校区"
+            allowClear
+            style="width: 100%"
+          >
+            <a-select-option v-for="c in campuses" :key="c.id" :value="c.id">
+              {{ c.name }}
+            </a-select-option>
+          </a-select>
+        </a-col>
+
+        <!-- 操作按钮 -->
+        <a-col :xs="24" :sm="24" :md="6" class="filter-actions">
+          <a-space>
+            <a-button type="primary" :loading="loading" @click="fetchData">
+              <template #icon><SearchOutlined /></template>
+              查询
+            </a-button>
+            <a-button @click="resetFilters">
+              <template #icon><ReloadOutlined /></template>
+              重置
+            </a-button>
+            <a-button @click="exportExcel">
+              <template #icon><DownloadOutlined /></template>
+              导出
+            </a-button>
+          </a-space>
+        </a-col>
+      </a-row>
+    </a-card>
+
+    <!-- 统计汇总卡片 -->
+    <a-row :gutter="16" class="summary-row">
+      <a-col :xs="12" :sm="6">
+        <a-card :bordered="false" class="summary-card">
+          <a-statistic
+            title="班主任总数"
+            :value="summaryStats.teacherCount"
+            :valueStyle="{ color: '#1890ff' }"
+          >
+            <template #suffix>人</template>
           </a-statistic>
         </a-card>
       </a-col>
-      <a-col :xs="24" :sm="12" :lg="6">
-        <a-card>
-          <a-statistic title="本月课时总计" :value="1256" suffix="课时" :value-style="{ color: '#1890ff' }">
-            <template #prefix><ClockCircleOutlined /></template>
+      <a-col :xs="12" :sm="6">
+        <a-card :bordered="false" class="summary-card">
+          <a-statistic
+            title="总缴费人数"
+            :value="summaryStats.totalPayCount"
+            :valueStyle="{ color: '#52c41a' }"
+          >
+            <template #suffix>人</template>
           </a-statistic>
         </a-card>
       </a-col>
-      <a-col :xs="24" :sm="12" :lg="6">
-        <a-card>
-          <a-statistic title="平均满意度" :value="4.6" suffix="分" :value-style="{ color: '#52c41a' }">
-            <template #prefix><StarOutlined /></template>
+      <a-col :xs="12" :sm="6">
+        <a-card :bordered="false" class="summary-card">
+          <a-statistic
+            title="总缴费金额"
+            :value="summaryStats.totalPayAmount"
+            :precision="2"
+            :valueStyle="{ color: '#52c41a' }"
+          >
+            <template #prefix>¥</template>
           </a-statistic>
         </a-card>
       </a-col>
-      <a-col :xs="24" :sm="12" :lg="6">
-        <a-card>
-          <a-statistic title="本月绩效奖金" prefix="¥" :value="186500" :value-style="{ color: '#722ed1' }">
-            <template #prefix><DollarOutlined /></template>
+      <a-col :xs="12" :sm="6">
+        <a-card :bordered="false" class="summary-card">
+          <a-statistic
+            title="平均退费率(人数)"
+            :value="summaryStats.avgRefundRateByCount * 100"
+            :precision="2"
+            :valueStyle="{ color: summaryStats.avgRefundRateByCount > 0.15 ? '#ff4d4f' : '#52c41a' }"
+          >
+            <template #suffix>%</template>
           </a-statistic>
         </a-card>
       </a-col>
     </a-row>
 
-    <!-- 图表区域 -->
-    <a-row :gutter="[16, 16]" class="chart-section">
-      <a-col :xs="24" :lg="12">
-        <a-card title="教师课时排名 TOP10" :bordered="false">
-          <div ref="barChartRef" class="chart-container"></div>
-        </a-card>
-      </a-col>
-      <a-col :xs="24" :lg="12">
-        <a-card title="满意度分布" :bordered="false">
-          <div ref="radarChartRef" class="chart-container"></div>
-        </a-card>
-      </a-col>
-    </a-row>
-
-    <!-- 教师绩效表格 -->
-    <a-card title="教师绩效明细" :bordered="false">
+    <!-- 数据表格 -->
+    <a-card :bordered="false" class="table-card">
+      <template #title>
+        <span>绩效明细</span>
+        <a-tag color="blue" style="margin-left: 8px">
+          {{ periodType === 'month' ? selectedMonth : selectedYear }}
+        </a-tag>
+      </template>
       <template #extra>
-        <a-input-search
-          v-model:value="searchText"
-          placeholder="搜索教师姓名"
-          style="width: 200px"
-        />
+        <a-space>
+          <span class="record-count">共 {{ tableData.length }} 条记录</span>
+        </a-space>
       </template>
 
       <a-table
         :columns="columns"
-        :data-source="filteredTeachers"
-        :pagination="{ pageSize: 10, showSizeChanger: true }"
-        row-key="id"
+        :data-source="tableData"
+        :loading="loading"
+        :pagination="pagination"
+        :scroll="{ x: 1200 }"
+        row-key="teacherId"
+        size="middle"
+        @change="handleTableChange"
       >
-        <template #bodyCell="{ column, record }">
-          <template v-if="column.key === 'name'">
-            <a-space>
-              <a-avatar :style="{ backgroundColor: getAvatarColor(record.id) }">
-                {{ record.name.charAt(0) }}
+        <!-- 班主任姓名 -->
+        <template #bodyCell="{ column, record, index }">
+          <!-- 序号 -->
+          <template v-if="column.dataIndex === 'index'">
+            {{ (pagination.current - 1) * pagination.pageSize + index + 1 }}
+          </template>
+
+          <!-- 班主任姓名带排名标记 -->
+          <template v-else-if="column.dataIndex === 'teacherName'">
+            <div class="teacher-name-cell">
+              <a-avatar
+                :style="{ backgroundColor: getAvatarColor(record.teacherName) }"
+                size="small"
+              >
+                {{ record.teacherName?.charAt(0) }}
               </a-avatar>
-              <span>{{ record.name }}</span>
-            </a-space>
+              <span class="name-text">{{ record.teacherName }}</span>
+              <a-tag v-if="index < 3 && pagination.current === 1" :color="getRankColor(index)">
+                TOP{{ index + 1 }}
+              </a-tag>
+            </div>
           </template>
-          <template v-if="column.key === 'rating'">
-            <a-rate :value="record.rating" disabled allow-half />
-            <span style="margin-left: 8px">{{ record.rating }}</span>
+
+          <!-- 管理班级数 -->
+          <template v-else-if="column.dataIndex === 'classCount'">
+            <span>{{ record.classCount }}</span>
           </template>
-          <template v-if="column.key === 'performance'">
-            <a-progress
-              :percent="record.performance"
-              :status="record.performance >= 80 ? 'success' : record.performance >= 60 ? 'normal' : 'exception'"
-              size="small"
-              style="width: 120px"
-            />
+
+          <!-- 缴费人数 -->
+          <template v-else-if="column.dataIndex === 'payCount'">
+            <span class="value-positive">{{ record.payCount }}</span>
           </template>
-          <template v-if="column.key === 'bonus'">
-            <span style="color: #52c41a; font-weight: 500">¥{{ record.bonus.toLocaleString() }}</span>
-          </template>
-          <template v-if="column.key === 'trend'">
-            <span :class="['trend', record.trend >= 0 ? 'up' : 'down']">
-              <ArrowUpOutlined v-if="record.trend >= 0" />
-              <ArrowDownOutlined v-else />
-              {{ Math.abs(record.trend) }}%
+
+          <!-- 退费人数 -->
+          <template v-else-if="column.dataIndex === 'refundCount'">
+            <span :class="record.refundCount > 0 ? 'value-negative' : ''">
+              {{ record.refundCount }}
             </span>
           </template>
-          <template v-if="column.key === 'action'">
-            <a-space>
-              <a-button type="link" size="small" @click="viewDetail(record)">详情</a-button>
-              <a-button type="link" size="small" @click="adjustBonus(record)">调整</a-button>
-            </a-space>
+
+          <!-- 缴费金额 -->
+          <template v-else-if="column.dataIndex === 'payAmount'">
+            <span class="value-positive">¥{{ formatNumber(record.payAmount) }}</span>
+          </template>
+
+          <!-- 退费金额 -->
+          <template v-else-if="column.dataIndex === 'refundAmount'">
+            <span :class="record.refundAmount > 0 ? 'value-negative' : ''">
+              ¥{{ formatNumber(record.refundAmount) }}
+            </span>
+          </template>
+
+          <!-- 人数退费率 -->
+          <template v-else-if="column.dataIndex === 'refundRateByCount'">
+            <a-progress
+              :percent="record.refundRateByCount * 100"
+              :size="[100, 8]"
+              :strokeColor="getRefundRateColor(record.refundRateByCount)"
+              :format="(percent: number) => `${percent.toFixed(2)}%`"
+            />
+          </template>
+
+          <!-- 金额退费率 -->
+          <template v-else-if="column.dataIndex === 'refundRateByAmount'">
+            <a-progress
+              :percent="record.refundRateByAmount * 100"
+              :size="[100, 8]"
+              :strokeColor="getRefundRateColor(record.refundRateByAmount)"
+              :format="(percent: number) => `${percent.toFixed(2)}%`"
+            />
           </template>
         </template>
       </a-table>
+    </a-card>
+
+    <!-- 指标说明 -->
+    <a-card :bordered="false" class="note-card">
+      <template #title>
+        <InfoCircleOutlined style="margin-right: 8px" />
+        指标口径说明
+      </template>
+      <a-descriptions :column="{ xs: 1, sm: 2 }" size="small" bordered>
+        <a-descriptions-item label="人数退费率">
+          退费人数 ÷ 缴费人数（缴费人数为0时显示0）
+        </a-descriptions-item>
+        <a-descriptions-item label="金额退费率">
+          退费金额 ÷ 缴费金额（缴费金额为0时显示0）
+        </a-descriptions-item>
+        <a-descriptions-item label="统计时间口径">
+          以「缴费日期/退费日期」落在所选时间范围内为准
+        </a-descriptions-item>
+        <a-descriptions-item label="管理班级数">
+          班主任在统计周期内有缴费/退费记录的班级数量
+        </a-descriptions-item>
+      </a-descriptions>
     </a-card>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { message } from 'ant-design-vue'
+import { ref, reactive, computed, onMounted } from 'vue';
+import { message } from 'ant-design-vue';
 import {
-  ExportOutlined,
-  TeamOutlined,
-  ClockCircleOutlined,
-  StarOutlined,
-  DollarOutlined,
-  ArrowUpOutlined,
-  ArrowDownOutlined
-} from '@ant-design/icons-vue'
-import * as echarts from 'echarts'
+  SearchOutlined,
+  ReloadOutlined,
+  DownloadOutlined,
+  InfoCircleOutlined,
+} from '@ant-design/icons-vue';
+import dayjs from 'dayjs';
+import { getTeacherRank, type TeacherRankItem, type DashboardQueryParams } from '@/api/dashboard';
+import { getMeta, type Campus } from '@/api/meta';
 
-interface Teacher {
-  id: number
-  name: string
-  subject: string
-  classes: number
-  hours: number
-  students: number
-  rating: number
-  performance: number
-  bonus: number
-  trend: number
-}
+// ============================================================
+// 状态定义
+// ============================================================
+
+const loading = ref(false);
 
 // 筛选条件
-const selectedMonth = ref('2024年1月')
-const searchText = ref('')
-const monthOptions = ['2024年1月', '2023年12月', '2023年11月', '2023年10月']
+const periodType = ref<'month' | 'year'>('month');
+const selectedMonth = ref(dayjs().format('YYYY-MM'));
+const selectedYear = ref(dayjs().format('YYYY'));
+const campusId = ref<string | undefined>(undefined);
 
-// 图表 refs
-const barChartRef = ref<HTMLElement | null>(null)
-const radarChartRef = ref<HTMLElement | null>(null)
-let barChart: echarts.ECharts | null = null
-let radarChart: echarts.ECharts | null = null
+// 元数据
+const campuses = ref<Campus[]>([]);
 
+// 表格数据
+const tableData = ref<TeacherRankItem[]>([]);
+
+// 分页配置
+const pagination = reactive({
+  current: 1,
+  pageSize: 10,
+  total: 0,
+  showSizeChanger: true,
+  showQuickJumper: true,
+  pageSizeOptions: ['10', '20', '50', '100'],
+  showTotal: (total: number) => `共 ${total} 条`,
+});
+
+// ============================================================
 // 表格列定义
+// ============================================================
+
 const columns = [
-  { title: '教师', dataIndex: 'name', key: 'name' },
-  { title: '科目', dataIndex: 'subject', key: 'subject' },
-  { title: '班级数', dataIndex: 'classes', key: 'classes' },
-  { title: '课时', dataIndex: 'hours', key: 'hours' },
-  { title: '学生数', dataIndex: 'students', key: 'students' },
-  { title: '评分', dataIndex: 'rating', key: 'rating', width: 180 },
-  { title: '绩效', dataIndex: 'performance', key: 'performance', width: 150 },
-  { title: '奖金', dataIndex: 'bonus', key: 'bonus' },
-  { title: '环比', dataIndex: 'trend', key: 'trend' },
-  { title: '操作', key: 'action', width: 120 }
-]
+  {
+    title: '序号',
+    dataIndex: 'index',
+    width: 60,
+    fixed: 'left' as const,
+  },
+  {
+    title: '班主任',
+    dataIndex: 'teacherName',
+    width: 160,
+    fixed: 'left' as const,
+  },
+  {
+    title: '管理班级数',
+    dataIndex: 'classCount',
+    width: 110,
+    align: 'center' as const,
+    sorter: (a: TeacherRankItem, b: TeacherRankItem) => a.classCount - b.classCount,
+  },
+  {
+    title: '缴费人数',
+    dataIndex: 'payCount',
+    width: 100,
+    align: 'right' as const,
+    sorter: (a: TeacherRankItem, b: TeacherRankItem) => a.payCount - b.payCount,
+  },
+  {
+    title: '退费人数',
+    dataIndex: 'refundCount',
+    width: 100,
+    align: 'right' as const,
+    sorter: (a: TeacherRankItem, b: TeacherRankItem) => a.refundCount - b.refundCount,
+  },
+  {
+    title: '缴费金额',
+    dataIndex: 'payAmount',
+    width: 130,
+    align: 'right' as const,
+    sorter: (a: TeacherRankItem, b: TeacherRankItem) => a.payAmount - b.payAmount,
+  },
+  {
+    title: '退费金额',
+    dataIndex: 'refundAmount',
+    width: 130,
+    align: 'right' as const,
+    sorter: (a: TeacherRankItem, b: TeacherRankItem) => a.refundAmount - b.refundAmount,
+  },
+  {
+    title: '人数退费率',
+    dataIndex: 'refundRateByCount',
+    width: 150,
+    align: 'center' as const,
+    sorter: (a: TeacherRankItem, b: TeacherRankItem) => a.refundRateByCount - b.refundRateByCount,
+  },
+  {
+    title: '金额退费率',
+    dataIndex: 'refundRateByAmount',
+    width: 150,
+    align: 'center' as const,
+    sorter: (a: TeacherRankItem, b: TeacherRankItem) => a.refundRateByAmount - b.refundRateByAmount,
+  },
+];
 
-// Mock 教师数据
-const teacherData = ref<Teacher[]>([
-  { id: 1, name: '张明华', subject: '数学', classes: 5, hours: 68, students: 125, rating: 4.8, performance: 95, bonus: 12800, trend: 8.5 },
-  { id: 2, name: '李晓红', subject: '英语', classes: 4, hours: 56, students: 98, rating: 4.6, performance: 88, bonus: 9600, trend: 3.2 },
-  { id: 3, name: '王建国', subject: '物理', classes: 3, hours: 48, students: 72, rating: 4.5, performance: 82, bonus: 8200, trend: -2.1 },
-  { id: 4, name: '赵丽萍', subject: '化学', classes: 4, hours: 52, students: 88, rating: 4.7, performance: 90, bonus: 10500, trend: 5.8 },
-  { id: 5, name: '陈志强', subject: '语文', classes: 3, hours: 45, students: 68, rating: 4.4, performance: 78, bonus: 7500, trend: 1.2 },
-  { id: 6, name: '刘美芳', subject: '生物', classes: 2, hours: 32, students: 45, rating: 4.3, performance: 75, bonus: 6200, trend: -1.5 },
-  { id: 7, name: '杨文杰', subject: '历史', classes: 2, hours: 28, students: 38, rating: 4.2, performance: 72, bonus: 5800, trend: 0.8 },
-  { id: 8, name: '周小燕', subject: '地理', classes: 2, hours: 30, students: 42, rating: 4.5, performance: 80, bonus: 6500, trend: 4.2 }
-])
+// ============================================================
+// 计算属性
+// ============================================================
 
-// 筛选后的数据
-const filteredTeachers = computed(() => {
-  if (!searchText.value) return teacherData.value
-  return teacherData.value.filter(t => t.name.includes(searchText.value))
-})
-
-// 头像颜色
-const getAvatarColor = (id: number) => {
-  const colors = ['#f56a00', '#7265e6', '#ffbf00', '#00a2ae', '#1890ff']
-  return colors[id % colors.length]
-}
-
-// 初始化柱状图
-const initBarChart = () => {
-  if (!barChartRef.value) return
-
-  barChart = echarts.init(barChartRef.value)
-  const sortedData = [...teacherData.value].sort((a, b) => b.hours - a.hours).slice(0, 10)
-
-  const option: echarts.EChartsOption = {
-    tooltip: {
-      trigger: 'axis',
-      axisPointer: { type: 'shadow' }
-    },
-    grid: {
-      left: '3%',
-      right: '4%',
-      bottom: '3%',
-      containLabel: true
-    },
-    xAxis: {
-      type: 'value',
-      name: '课时'
-    },
-    yAxis: {
-      type: 'category',
-      data: sortedData.map(t => t.name).reverse()
-    },
-    series: [
-      {
-        name: '课时',
-        type: 'bar',
-        data: sortedData.map(t => t.hours).reverse(),
-        itemStyle: {
-          color: new echarts.graphic.LinearGradient(0, 0, 1, 0, [
-            { offset: 0, color: '#1890ff' },
-            { offset: 1, color: '#36cfc9' }
-          ])
-        },
-        label: {
-          show: true,
-          position: 'right',
-          formatter: '{c}课时'
-        }
-      }
-    ]
+// 汇总统计
+const summaryStats = computed(() => {
+  const data = tableData.value;
+  if (data.length === 0) {
+    return {
+      teacherCount: 0,
+      totalPayCount: 0,
+      totalPayAmount: 0,
+      avgRefundRateByCount: 0,
+    };
   }
-  barChart.setOption(option)
-}
 
-// 初始化雷达图
-const initRadarChart = () => {
-  if (!radarChartRef.value) return
+  const totalPayCount = data.reduce((sum, item) => sum + item.payCount, 0);
+  const totalPayAmount = data.reduce((sum, item) => sum + item.payAmount, 0);
+  const totalRefundCount = data.reduce((sum, item) => sum + item.refundCount, 0);
 
-  radarChart = echarts.init(radarChartRef.value)
-  const option: echarts.EChartsOption = {
-    tooltip: {
-      trigger: 'item'
-    },
-    legend: {
-      data: ['张明华', '李晓红', '赵丽萍'],
-      bottom: 0
-    },
-    radar: {
-      indicator: [
-        { name: '课时量', max: 100 },
-        { name: '学生评价', max: 5 },
-        { name: '教学效果', max: 100 },
-        { name: '出勤率', max: 100 },
-        { name: '团队协作', max: 100 }
-      ],
-      radius: '60%'
-    },
-    series: [
-      {
-        type: 'radar',
-        data: [
-          {
-            value: [85, 4.8, 92, 98, 88],
-            name: '张明华',
-            itemStyle: { color: '#1890ff' }
-          },
-          {
-            value: [72, 4.6, 85, 95, 90],
-            name: '李晓红',
-            itemStyle: { color: '#52c41a' }
-          },
-          {
-            value: [78, 4.7, 88, 96, 85],
-            name: '赵丽萍',
-            itemStyle: { color: '#722ed1' }
-          }
-        ]
-      }
-    ]
+  return {
+    teacherCount: data.length,
+    totalPayCount,
+    totalPayAmount,
+    avgRefundRateByCount: totalPayCount > 0 ? totalRefundCount / totalPayCount : 0,
+  };
+});
+
+// ============================================================
+// 方法
+// ============================================================
+
+/**
+ * 构建查询参数
+ */
+function buildQueryParams(): DashboardQueryParams {
+  let startDate: string;
+  let endDate: string;
+
+  if (periodType.value === 'month') {
+    const monthStart = dayjs(selectedMonth.value).startOf('month');
+    const monthEnd = dayjs(selectedMonth.value).endOf('month');
+    startDate = monthStart.format('YYYY-MM-DD');
+    endDate = monthEnd.format('YYYY-MM-DD');
+  } else {
+    const yearStart = dayjs(selectedYear.value).startOf('year');
+    const yearEnd = dayjs(selectedYear.value).endOf('year');
+    startDate = yearStart.format('YYYY-MM-DD');
+    endDate = yearEnd.format('YYYY-MM-DD');
   }
-  radarChart.setOption(option)
+
+  return {
+    startDate,
+    endDate,
+    campusId: campusId.value,
+  };
 }
 
-// 事件处理
-const handleExport = () => {
-  message.success('报表导出中...')
+/**
+ * 获取数据
+ */
+async function fetchData() {
+  loading.value = true;
+  try {
+    const params = buildQueryParams();
+    const res = await getTeacherRank(params);
+
+    if (res.code === 0 && res.data) {
+      tableData.value = res.data.items || [];
+      pagination.total = tableData.value.length;
+      pagination.current = 1;
+    } else {
+      message.error(res.message || '获取数据失败');
+    }
+  } catch (error) {
+    console.error('获取班主任绩效数据失败:', error);
+    message.error('获取数据失败，请稍后重试');
+  } finally {
+    loading.value = false;
+  }
 }
 
-const viewDetail = (record: Teacher) => {
-  message.info(`查看 ${record.name} 的详细绩效`)
+/**
+ * 获取元数据
+ */
+async function fetchMeta() {
+  try {
+    const meta = await getMeta();
+    campuses.value = meta.campuses || [];
+  } catch (error) {
+    console.error('获取元数据失败:', error);
+  }
 }
 
-const adjustBonus = (record: Teacher) => {
-  message.info(`调整 ${record.name} 的绩效奖金`)
+/**
+ * 处理周期切换
+ */
+function handlePeriodChange() {
+  fetchData();
 }
 
-// 窗口 resize 处理
-const handleResize = () => {
-  barChart?.resize()
-  radarChart?.resize()
+/**
+ * 重置筛选条件
+ */
+function resetFilters() {
+  periodType.value = 'month';
+  selectedMonth.value = dayjs().format('YYYY-MM');
+  selectedYear.value = dayjs().format('YYYY');
+  campusId.value = undefined;
+  fetchData();
 }
+
+/**
+ * 处理表格变化（分页、排序）
+ */
+function handleTableChange(pag: any) {
+  pagination.current = pag.current;
+  pagination.pageSize = pag.pageSize;
+}
+
+/**
+ * 导出 Excel
+ */
+function exportExcel() {
+  message.info('导出功能开发中...');
+  // TODO: 实现导出逻辑
+}
+
+/**
+ * 格式化数字（千分位）
+ */
+function formatNumber(value: number): string {
+  return value.toLocaleString('zh-CN', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
+/**
+ * 获取头像颜色
+ */
+function getAvatarColor(name: string): string {
+  const colors = [
+    '#1890ff', '#52c41a', '#faad14', '#eb2f96',
+    '#722ed1', '#13c2c2', '#fa541c', '#2f54eb',
+  ];
+  const index = name ? name.charCodeAt(0) % colors.length : 0;
+  return colors[index];
+}
+
+/**
+ * 获取排名标签颜色
+ */
+function getRankColor(index: number): string {
+  const colors = ['#f5222d', '#fa8c16', '#fadb14'];
+  return colors[index] || '#d9d9d9';
+}
+
+/**
+ * 获取退费率颜色
+ */
+function getRefundRateColor(rate: number): string {
+  if (rate >= 0.2) return '#ff4d4f';
+  if (rate >= 0.1) return '#faad14';
+  return '#52c41a';
+}
+
+// ============================================================
+// 生命周期
+// ============================================================
 
 onMounted(() => {
-  initBarChart()
-  initRadarChart()
-  window.addEventListener('resize', handleResize)
-})
-
-onUnmounted(() => {
-  window.removeEventListener('resize', handleResize)
-  barChart?.dispose()
-  radarChart?.dispose()
-})
+  fetchMeta();
+  fetchData();
+});
 </script>
 
-<style scoped lang="less">
+<style scoped>
 .teacher-performance {
   padding: 24px;
   background: #f0f2f5;
@@ -336,38 +548,96 @@ onUnmounted(() => {
 }
 
 .page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
   margin-bottom: 24px;
-  flex-wrap: wrap;
-  gap: 16px;
+}
 
-  h2 {
-    margin: 0;
+.page-title {
+  margin: 0 0 8px 0;
+  font-size: 24px;
+  font-weight: 600;
+  color: rgba(0, 0, 0, 0.85);
+}
+
+.page-desc {
+  margin: 0;
+  font-size: 14px;
+  color: rgba(0, 0, 0, 0.45);
+}
+
+.filter-card {
+  margin-bottom: 24px;
+  border-radius: 8px;
+}
+
+.filter-label {
+  font-size: 14px;
+  font-weight: 500;
+  color: rgba(0, 0, 0, 0.65);
+  margin-bottom: 8px;
+}
+
+.filter-actions {
+  display: flex;
+  align-items: flex-end;
+  padding-top: 24px;
+}
+
+.summary-row {
+  margin-bottom: 24px;
+}
+
+.summary-card {
+  border-radius: 8px;
+  text-align: center;
+}
+
+.table-card {
+  margin-bottom: 24px;
+  border-radius: 8px;
+}
+
+.record-count {
+  font-size: 14px;
+  color: rgba(0, 0, 0, 0.45);
+}
+
+.teacher-name-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.name-text {
+  font-weight: 500;
+}
+
+.value-positive {
+  color: #52c41a;
+  font-weight: 500;
+}
+
+.value-negative {
+  color: #ff4d4f;
+  font-weight: 500;
+}
+
+.note-card {
+  border-radius: 8px;
+}
+
+/* 响应式调整 */
+@media (max-width: 768px) {
+  .teacher-performance {
+    padding: 16px;
+  }
+
+  .filter-actions {
+    padding-top: 16px;
+    justify-content: flex-start;
+  }
+
+  .page-title {
     font-size: 20px;
-    font-weight: 600;
-  }
-}
-
-.overview-section {
-  margin-bottom: 16px;
-}
-
-.chart-section {
-  margin-bottom: 16px;
-
-  .chart-container {
-    height: 320px;
-  }
-}
-
-.trend {
-  &.up {
-    color: #52c41a;
-  }
-  &.down {
-    color: #ff4d4f;
   }
 }
 </style>

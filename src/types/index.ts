@@ -1,3 +1,5 @@
+// src/types/index.ts
+
 // 折线图类型
 export interface LineChartSeries {
   name: string
@@ -82,4 +84,26 @@ export interface PieChartConfig {
   borderRadius?: number
   borderWidth?: number
   borderColor?: string
+}
+
+// 用户信息类型
+export interface UserInfo {
+  id: string
+  name: string
+  role: 'principal' | 'vice_principal' | 'teacher'
+  campusId?: string
+  campusName?: string
+  permissions?: string[]
+}
+
+// 登录请求
+export interface LoginRequest {
+  username: string
+  password: string
+}
+
+// 登录响应
+export interface LoginResponse {
+  token: string
+  user: UserInfo
 }

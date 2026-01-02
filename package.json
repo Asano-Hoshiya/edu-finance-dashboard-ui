@@ -7,29 +7,35 @@
     "dev": "vite",
     "build": "vue-tsc && vite build",
     "preview": "vite preview",
-    "lint": "eslint . --ext .vue,.js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts --fix"
+    "lint": "eslint . --ext .vue,.js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts --fix",
+    "mock": "node mock-server.cjs",
+    "dev:mock": "concurrently \"npm run mock\" \"npm run dev\""
   },
   "dependencies": {
-    "vue": "^3.5.26",
-    "vue-router": "^4.4.5",
-    "pinia": "^3.x",
-    "ant-design-vue": "^4.x",
-    "echarts": "^5.5.1",
-    "axios": "^1.7.8",
     "@ant-design/icons-vue": "^7.x",
-    "dayjs": "^1.11.13"
+    "ant-design-vue": "^4.x",
+    "axios": "^1.7.8",
+    "dayjs": "^1.11.13",
+    "echarts": "^5.5.1",
+    "pinia": "^3.x",
+    "vue": "^3.5.26",
+    "vue-router": "^4.4.5"
   },
   "devDependencies": {
-    "@vitejs/plugin-vue": "^6.0.3",
-    "vite": "^5.4.8",
-    "typescript": "^5.6.4",
-    "vue-tsc": "^2.1.6",
     "@types/node": "^22.x",
+    "@typescript-eslint/eslint-plugin": "^8.19.0",
+    "@typescript-eslint/parser": "^8.19.0",
+    "@vitejs/plugin-vue": "^6.0.3",
+    "@vue/eslint-config-typescript": "^14.2.0",
+    "concurrently": "^9.2.1",
+    "cors": "^2.8.5",
     "eslint": "^9.x",
     "eslint-plugin-vue": "^9.27.0",
-    "@vue/eslint-config-typescript": "^14.2.0",
-    "@typescript-eslint/parser": "^8.19.0",
-    "@typescript-eslint/eslint-plugin": "^8.19.0",
-    "less": "^4.3.0"
+    "express": "^5.2.1",
+    "json-server": "^1.0.0-beta.3",
+    "less": "^4.3.0",
+    "typescript": "^5.6.4",
+    "vite": "^5.4.8",
+    "vue-tsc": "^2.1.6"
   }
 }
